@@ -2,7 +2,7 @@
 var isNode = typeof require === 'function' && typeof process === 'object';
 var window = this;
 if (isNode) {
-  window = globalThis;
+  window = globalThis.window = globalThis;
   require('vm').runInThisContext(require('fs').readFileSync(require('path').join(__dirname, '../assets/calc.js'), 'utf8'));
 } else {
   load(arguments[0] || 'assets/calc.js');
