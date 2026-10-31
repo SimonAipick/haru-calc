@@ -1,0 +1,68 @@
+<!--
+{"slug": "loan-interest", "title": "대출이자 계산기", "category": "금융", "order": 1,
+ "short": "원리금균등·원금균등·만기일시",
+ "description": "대출금, 연이율, 기간을 넣으면 월 상환액과 총이자를 계산합니다. 원리금균등, 원금균등, 만기일시 상환 방식을 비교하고 회차별 상환 스케줄을 확인하세요.",
+ "lead": "상환 방식별 월 납입금, 총이자, 회차별 상환표를 계산합니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <label>대출금<input class="money" id="principal" inputmode="numeric" placeholder="예: 100,000,000"></label>
+  <div class="grid2">
+    <label>연이율 (%)<input type="number" id="rate" inputmode="decimal" min="0" max="30" step="0.01" placeholder="예: 4.5"></label>
+    <label>대출 기간 (개월)<input type="number" id="months" inputmode="numeric" min="1" max="600" step="1" placeholder="예: 360"></label>
+  </div>
+  <fieldset>
+    <legend>상환 방식</legend>
+    <div class="seg">
+      <label><input type="radio" name="method" value="annuity" checked> 원리금균등</label>
+      <label><input type="radio" name="method" value="principal"> 원금균등</label>
+      <label><input type="radio" name="method" value="bullet"> 만기일시</label>
+    </div>
+  </fieldset>
+  <button type="submit">이자 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const P = UI.num('principal'), rate = UI.num('rate'), n = Math.round(UI.num('months'));
+  if (!P || !n || UI.$('rate').value === '') return null;
+  if (n > 600) throw new Error('대출 기간은 600개월(50년)까지 입력할 수 있습니다.');
+  const method = UI.val('method');
+  const r = Calc.loan(P, rate, n, method);
+  const first = r.rows[0], last = r.rows[n - 1];
+  const headline = method === 'annuity' ? ['매월 상환액', Calc.won(first.payment)]
+    : method === 'principal' ? ['첫 달 상환액', Calc.won(first.payment)]
+    : ['매월 이자', Calc.won(first.interest)];
+  const rows = [
+    ['총 이자', Calc.won(r.totalInterest) + ' (' + Calc.korean(r.totalInterest) + '원)'],
+    ['총 상환액', Calc.won(r.totalPayment)],
+  ];
+  if (method === 'principal') rows.push(['마지막 달 상환액', Calc.won(last.payment)]);
+  if (method === 'bullet') rows.push(['만기 상환액', Calc.won(last.payment)]);
+  // 다른 방식과 총이자 비교
+  const others = { annuity: '원리금균등', principal: '원금균등', bullet: '만기일시' };
+  Object.keys(others).forEach(function (m) {
+    if (m !== method) rows.push([others[m] + '이면 총 이자', Calc.won(Calc.loan(P, rate, n, m).totalInterest)]);
+  });
+  const table = '<details><summary>회차별 상환표 보기</summary><div class="table-wrap"><table><thead><tr><th>회차</th><th>상환액</th><th>원금</th><th>이자</th><th>잔액</th></tr></thead><tbody>'
+    + r.rows.map(function (x) {
+      return '<tr><td>' + x.k + '</td><td>' + Calc.comma(Math.round(x.payment)) + '</td><td>' + Calc.comma(Math.round(x.principal))
+        + '</td><td>' + Calc.comma(Math.round(x.interest)) + '</td><td>' + Calc.comma(Math.round(x.balance)) + '</td></tr>';
+    }).join('') + '</tbody></table></div></details>';
+  return UI.result(headline, rows, ['금리 변동, 중도상환수수료, 거치기간은 반영하지 않았습니다.']) + table;
+});
+</script>
+<!-- guide -->
+<h2>상환 방식별 차이</h2>
+<h3>원리금균등상환</h3>
+<p>매달 <strong>같은 금액</strong>(원금 + 이자)을 냅니다. 초반에는 이자 비중이 크고 갈수록 원금 비중이 커집니다. 매달 나가는 돈이 일정해 계획 세우기가 쉬워 주택담보대출에서 가장 많이 씁니다.</p>
+<p class="formula">월 상환액 = 대출금 × r ÷ (1 − (1 + r)<sup>−n</sup>)  (r = 연이율 ÷ 12, n = 개월 수)</p>
+<h3>원금균등상환</h3>
+<p>매달 <strong>같은 원금</strong>에 남은 잔액에 대한 이자를 더해 냅니다. 첫 달 부담이 가장 크고 점점 줄어듭니다. 원금이 빨리 줄어 <strong>총이자가 가장 적습니다</strong>.</p>
+<h3>만기일시상환</h3>
+<p>대출 기간 동안 <strong>이자만</strong> 내고 만기에 원금을 한 번에 갚습니다. 매달 부담은 가장 적지만 총이자는 가장 많습니다. 신용대출, 전세자금대출에서 흔합니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>은행 계산과 몇 원씩 차이가 나요</h3>
+<p>은행은 실제 일수(30일, 31일)로 이자를 계산하고 원 단위를 절사하는 경우가 많아 몇 원~몇십 원 차이가 날 수 있습니다. 이 계산기는 매월 같은 월 이율(연이율 ÷ 12)을 적용합니다.</p>
+<h3>어떤 방식이 유리한가요?</h3>
+<p>총이자만 보면 원금균등이 가장 유리하지만, 초기 상환 부담이 큽니다. 소득이 일정하다면 원리금균등, 여유 자금이 있다면 원금균등, 곧 목돈이 들어올 예정이라면 만기일시가 맞을 수 있습니다.</p>

@@ -1,0 +1,63 @@
+<!--
+{"slug": "pyeong", "title": "평수 계산기", "category": "생활", "order": 3,
+ "short": "㎡ ↔ 평 변환",
+ "description": "제곱미터(㎡)와 평을 서로 변환합니다. 아파트 전용면적 59㎡, 84㎡가 몇 평인지, 공급면적과 전용면적의 차이까지 정리했습니다.",
+ "lead": "제곱미터(㎡)와 평을 서로 변환합니다. 1평 = 3.3058㎡"}
+-->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>제곱미터 (㎡)<input type="number" id="m2" inputmode="decimal" min="0" step="any" placeholder="예: 84"></label>
+    <label>평<input type="number" id="py" inputmode="decimal" min="0" step="any" placeholder="예: 25.4"></label>
+  </div>
+  <p class="note" style="margin:0">둘 중 아무 칸에 입력하면 다른 칸이 자동으로 채워집니다.</p>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  let last = 'm2';
+  UI.$('m2').addEventListener('input', function () { last = 'm2'; });
+  UI.$('py').addEventListener('input', function () { last = 'py'; });
+  UI.bind('f', 'out', function () {
+    let m2, py;
+    if (last === 'm2') {
+      if (UI.$('m2').value === '') { UI.$('py').value = ''; return null; }
+      m2 = UI.num('m2'); py = m2 / Calc.PYEONG;
+      UI.$('py').value = +py.toFixed(2);
+    } else {
+      if (UI.$('py').value === '') { UI.$('m2').value = ''; return null; }
+      py = UI.num('py'); m2 = py * Calc.PYEONG;
+      UI.$('m2').value = +m2.toFixed(2);
+    }
+    return UI.result(['변환 결과', Calc.comma(m2, 2) + '㎡ = ' + Calc.comma(py, 2) + '평'], [
+      ['가로 × 세로 (정사각형이라면)', Calc.comma(Math.sqrt(m2), 2) + 'm × ' + Calc.comma(Math.sqrt(m2), 2) + 'm'],
+    ]);
+  });
+})();
+</script>
+<!-- guide -->
+<h2>변환 공식</h2>
+<p class="formula">평 = ㎡ × 0.3025  ·  ㎡ = 평 × 3.3058</p>
+<p>1평은 사방 6자(약 1.818m) 정사각형의 넓이로, 정확히 400/121㎡(약 3.3058㎡)입니다.</p>
+
+<h2>아파트 대표 면적 표</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>전용면적</th><th>전용 평수</th><th>흔히 부르는 평형 (공급)</th></tr></thead>
+  <tbody>
+    <tr><td>39㎡</td><td>11.8평</td><td>15~17평형</td></tr>
+    <tr><td>49㎡</td><td>14.8평</td><td>19~21평형</td></tr>
+    <tr><td>59㎡</td><td>17.8평</td><td>24~26평형</td></tr>
+    <tr><td>74㎡</td><td>22.4평</td><td>29~31평형</td></tr>
+    <tr><td>84㎡</td><td>25.4평</td><td>32~35평형</td></tr>
+    <tr><td>114㎡</td><td>34.5평</td><td>43~46평형</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>전용면적과 공급면적</h2>
+<ul>
+  <li><strong>전용면적:</strong> 현관문 안쪽, 우리 집만 쓰는 공간 (발코니 제외)</li>
+  <li><strong>공급면적:</strong> 전용면적 + 계단·복도·엘리베이터 같은 주거공용면적</li>
+  <li><strong>계약면적:</strong> 공급면적 + 주차장·관리사무소 같은 기타공용면적</li>
+</ul>
+<p>흔히 말하는 '34평 아파트'는 공급면적 기준이고, 실제 집 안 넓이(전용)는 84㎡, 약 25.4평입니다. 공급면적은 단지마다 달라 위 평형은 대략적인 범위입니다.</p>

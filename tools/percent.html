@@ -1,0 +1,61 @@
+<!--
+{"slug": "percent", "title": "퍼센트 계산기", "category": "생활", "order": 4,
+ "short": "할인율·증감률·비율",
+ "description": "A의 B%는 얼마인지, A는 B의 몇 %인지, 증가율·감소율, 할인가까지 퍼센트 계산을 한 페이지에서 바로 할 수 있습니다.",
+ "lead": "비율, 증감률, 할인 금액 등 자주 쓰는 퍼센트 계산을 모았습니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>무엇을 계산할까요?</legend>
+    <div class="seg">
+      <label><input type="radio" name="mode" value="of" checked> A의 B%</label>
+      <label><input type="radio" name="mode" value="ratio"> A는 B의 몇 %</label>
+      <label><input type="radio" name="mode" value="change"> A → B 증감률</label>
+      <label><input type="radio" name="mode" value="apply"> A에서 B% 증감</label>
+    </div>
+  </fieldset>
+  <div class="grid2">
+    <label><span id="la">A (전체 값)</span><input type="number" id="a" inputmode="decimal" step="any"></label>
+    <label><span id="lb">B (%)</span><input type="number" id="b" inputmode="decimal" step="any"></label>
+  </div>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const mode = UI.val('mode');
+  const labels = { of: ['A (전체 값)', 'B (%)'], ratio: ['A (부분 값)', 'B (전체 값)'], change: ['A (이전 값)', 'B (이후 값)'], apply: ['A (원래 값)', 'B (%) — 할인은 음수로'] };
+  UI.$('la').textContent = labels[mode][0];
+  UI.$('lb').textContent = labels[mode][1];
+  if (UI.$('a').value === '' || UI.$('b').value === '') return null;
+  const a = UI.num('a'), b = UI.num('b');
+  const n = function (x) { return Calc.comma(x, 4); };
+  if (mode === 'of') return UI.result([n(a) + '의 ' + n(b) + '%', n(a * b / 100)]);
+  if (mode === 'ratio') {
+    if (b === 0) throw new Error('전체 값(B)은 0이 될 수 없습니다.');
+    return UI.result([n(a) + '은(는) ' + n(b) + '의', n(a / b * 100) + '%']);
+  }
+  if (mode === 'change') {
+    if (a === 0) throw new Error('이전 값(A)이 0이면 증감률을 계산할 수 없습니다.');
+    const c = (b - a) / Math.abs(a) * 100;
+    return UI.result([c >= 0 ? '증가율' : '감소율', (c >= 0 ? '+' : '') + n(c) + '%'], [['차이', (b - a >= 0 ? '+' : '') + n(b - a)]]);
+  }
+  const r = a * (1 + b / 100);
+  return UI.result([n(a) + '에서 ' + (b >= 0 ? b + '% 증가' : (-b) + '% 감소'), n(r)], [['변화량', (r - a >= 0 ? '+' : '') + n(r - a)]]);
+});
+</script>
+<!-- guide -->
+<h2>퍼센트 공식 정리</h2>
+<ul>
+  <li><strong>A의 B%:</strong> A × B ÷ 100 → 50,000원의 20% = 10,000원</li>
+  <li><strong>A는 B의 몇 %:</strong> A ÷ B × 100 → 30은 120의 25%</li>
+  <li><strong>증감률:</strong> (이후 − 이전) ÷ 이전 × 100 → 80에서 100이면 +25%</li>
+  <li><strong>B% 증감:</strong> A × (1 + B ÷ 100) → 30,000원에서 15% 할인 = 25,500원</li>
+</ul>
+
+<h2>헷갈리기 쉬운 것</h2>
+<h3>퍼센트와 퍼센트포인트(%p)</h3>
+<p>금리가 3%에서 4%로 오르면 <strong>1%p</strong> 오른 것이고, 비율로는 <strong>33.3%</strong> 오른 것입니다. 뉴스에서 두 표현을 구분해서 쓰는 이유입니다.</p>
+<h3>50% 오르고 50% 내리면 제자리일까?</h3>
+<p>아닙니다. 100이 50% 오르면 150, 거기서 50% 내리면 75가 됩니다. 기준값이 바뀌기 때문입니다.</p>
+<h3>할인 후 할인</h3>
+<p>30% 할인 후 추가 20% 할인은 50% 할인이 아니라 1 − 0.7 × 0.8 = <strong>44% 할인</strong>입니다.</p>

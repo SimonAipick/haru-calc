@@ -1,0 +1,66 @@
+<!--
+{"slug": "weekly-holiday-pay", "title": "주휴수당 계산기", "category": "직장·급여", "order": 3,
+ "short": "시급·주 근무시간으로 주휴수당",
+ "description": "시급과 주 근무시간을 넣으면 주휴수당과 주급, 월 예상 급여를 계산합니다. 2026년 최저시급 10,320원 기준 예시와 지급 조건을 정리했습니다.",
+ "lead": "주 15시간 이상 일하는 근로자의 주휴수당과 주급을 계산합니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>시급<input class="money" id="wage" inputmode="numeric" value="10320"></label>
+    <label>주 근무시간 <small>소정근로시간</small><input type="number" id="hours" inputmode="decimal" min="0" max="68" step="0.5" placeholder="예: 20"></label>
+  </div>
+  <button type="submit">주휴수당 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const wage = UI.num('wage'), h = UI.num('hours');
+  if (!wage || !h) return null;
+  const hh = Calc.weeklyHolidayHours(h);
+  const pay = hh * wage;
+  const weekly = h * wage + pay;
+  const mh = Calc.monthlyHours(h);
+  const notes = [];
+  if (h < 15) notes.push('주 15시간 미만이라 주휴수당 지급 대상이 아닙니다.');
+  if (h > 40) notes.push('주휴수당은 40시간까지만 반영됩니다. 40시간을 넘는 근무는 연장근로수당(시급의 1.5배) 대상일 수 있습니다.');
+  if (wage < 10320) notes.push('입력한 시급이 2026년 최저시급(10,320원)보다 낮습니다.');
+  return UI.result(['주휴수당 (1주)', Calc.won(pay)], [
+    ['주휴시간', Calc.comma(hh, 1) + '시간'],
+    ['주급 (근무 + 주휴)', Calc.won(weekly)],
+    ['월 환산 시간', mh + '시간'],
+    ['월 예상 급여', Calc.won(mh * wage)],
+  ], notes);
+});
+</script>
+<!-- guide -->
+<h2>주휴수당 계산 공식</h2>
+<p class="formula">주휴수당 = (1주 소정근로시간 ÷ 40) × 8시간 × 시급</p>
+<p>주 40시간 이상 일하면 하루치(8시간) 임금이 주휴수당으로 나옵니다. 주 20시간이면 그 절반인 4시간분입니다.</p>
+
+<h2>받을 수 있는 조건</h2>
+<ul>
+  <li>1주 소정근로시간이 <strong>15시간 이상</strong></li>
+  <li>그 주에 정해진 근무일을 <strong>모두 출근</strong>(지각·조퇴는 결근이 아님)</li>
+  <li>다음 주에도 근무가 예정되어 있을 것</li>
+</ul>
+<p>아르바이트, 단시간 근로자도 조건을 충족하면 사업장 규모와 상관없이 받을 수 있습니다.</p>
+
+<h2>2026년 최저시급 기준 예시</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>주 근무시간</th><th>주휴수당</th><th>주급</th><th>월 환산</th></tr></thead>
+  <tbody>
+    <tr><td>15시간</td><td>30,960원</td><td>185,760원</td><td>약 80만원</td></tr>
+    <tr><td>20시간</td><td>41,280원</td><td>247,680원</td><td>약 107만원</td></tr>
+    <tr><td>30시간</td><td>61,920원</td><td>371,520원</td><td>약 161만원</td></tr>
+    <tr><td>40시간</td><td>82,560원</td><td>495,360원</td><td>2,156,880원</td></tr>
+  </tbody>
+</table>
+</div>
+<p>월 환산은 주휴시간을 포함한 주 시간에 4.345주(365 ÷ 7 ÷ 12)를 곱한 값입니다. 주 40시간이면 209시간이 됩니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>월급에 주휴수당이 포함되어 있나요?</h3>
+<p>월급제 근로자는 보통 월 209시간에 주휴시간이 이미 들어 있습니다. 시급제 아르바이트라면 급여명세서에 주휴수당이 따로 표시되는지 확인해 보세요.</p>
+<h3>마지막 주에 그만두면 주휴수당은요?</h3>
+<p>고용노동부 해석에 따르면 다음 주 근로가 예정되어 있지 않은 마지막 주에는 주휴수당이 발생하지 않습니다.</p>

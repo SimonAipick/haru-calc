@@ -1,0 +1,59 @@
+<!--
+{"slug": "wage-converter", "title": "시급 월급 연봉 변환기", "category": "직장·급여", "order": 4,
+ "short": "시급 ↔ 월급 ↔ 연봉 환산",
+ "description": "시급, 월급, 연봉 중 하나만 입력하면 나머지를 바로 환산합니다. 주휴수당을 포함한 월 209시간 기준과 주 근무시간별 환산을 지원합니다.",
+ "lead": "주휴시간을 포함한 법정 기준으로 시급·월급·연봉을 서로 환산합니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>무엇을 입력할까요?</legend>
+    <div class="seg">
+      <label><input type="radio" name="from" value="hour" checked> 시급</label>
+      <label><input type="radio" name="from" value="month"> 월급</label>
+      <label><input type="radio" name="from" value="year"> 연봉</label>
+    </div>
+  </fieldset>
+  <div class="grid2">
+    <label>금액 <small>세전</small><input class="money" id="amount" inputmode="numeric" placeholder="예: 10,320"></label>
+    <label>주 근무시간<input type="number" id="hours" inputmode="decimal" min="1" max="68" step="0.5" value="40"></label>
+  </div>
+  <button type="submit">환산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const from = UI.val('from'), amount = UI.num('amount'), h = UI.num('hours');
+  if (!amount || !h) return null;
+  const mh = Calc.monthlyHours(h);
+  const hourly = from === 'hour' ? amount : from === 'month' ? amount / mh : amount / 12 / mh;
+  const monthly = hourly * mh;
+  const rows = [
+    ['시급', Calc.won(hourly)],
+    ['일급 (' + Calc.comma(h / 5, 1) + '시간)', Calc.won(hourly * h / 5)],
+    ['주급 (주휴 포함)', Calc.won(hourly * (h + Calc.weeklyHolidayHours(h)))],
+    ['월급 (' + mh + '시간)', Calc.won(monthly)],
+    ['연봉', Calc.won(monthly * 12) + ' (' + Calc.korean(monthly * 12) + '원)'],
+  ];
+  const notes = ['일급은 주 5일 근무를 가정했습니다.'];
+  if (hourly < 10320) notes.push('시급으로 환산하면 2026년 최저시급(10,320원)보다 낮습니다.');
+  return UI.result(['월급 기준', Calc.won(monthly)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>환산 기준</h2>
+<p class="formula">월 소정근로시간 = (주 근무시간 + 주휴시간) × 365 ÷ 7 ÷ 12</p>
+<p>주 40시간 근무자는 (40 + 8) × 4.345 ≈ <strong>209시간</strong>이 한 달 기준입니다. 고용노동부가 최저임금 월 환산액을 발표할 때도 이 209시간을 씁니다.</p>
+<ul>
+  <li>월급 = 시급 × 월 소정근로시간</li>
+  <li>연봉 = 월급 × 12</li>
+  <li>시급 = 월급 ÷ 월 소정근로시간</li>
+</ul>
+
+<h2>2026년 최저임금</h2>
+<p>2026년 최저시급은 <strong>10,320원</strong>, 주 40시간 기준 월 환산액은 <strong>2,156,880원</strong>, 연 환산액은 약 2,588만원입니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>연봉에 퇴직금이 포함된 경우는요?</h3>
+<p>'퇴직금 포함 연봉'이라면 연봉을 13으로 나눈 금액이 실제 월급입니다. 이 계산기는 퇴직금이 별도인 일반적인 경우를 기준으로 합니다.</p>
+<h3>실수령액과는 왜 다른가요?</h3>
+<p>여기서 나오는 금액은 세전입니다. 실제로는 국민연금, 건강보험, 고용보험, 소득세가 빠져 보통 세전 금액의 85~90% 정도를 받습니다.</p>

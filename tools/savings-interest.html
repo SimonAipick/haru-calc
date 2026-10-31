@@ -1,0 +1,61 @@
+<!--
+{"slug": "savings-interest", "title": "예금 적금 이자 계산기", "category": "금융", "order": 2,
+ "short": "세후 만기 수령액",
+ "description": "예금·적금 금액과 금리, 기간을 넣으면 이자소득세 15.4%를 뺀 세후 이자와 만기 수령액을 계산합니다. 단리·월복리, 비과세·세금우대도 지원합니다.",
+ "lead": "예금·적금의 세후 이자와 만기 수령액을 계산합니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>상품 종류</legend>
+    <div class="seg">
+      <label><input type="radio" name="kind" value="installment" checked> 적금 (매월 납입)</label>
+      <label><input type="radio" name="kind" value="deposit"> 예금 (한 번에 예치)</label>
+    </div>
+  </fieldset>
+  <label><span id="amount-label">월 납입액</span><input class="money" id="amount" inputmode="numeric" placeholder="예: 500,000"></label>
+  <div class="grid2">
+    <label>연이율 (%)<input type="number" id="rate" inputmode="decimal" min="0" max="30" step="0.01" placeholder="예: 3.5"></label>
+    <label>기간 (개월)<input type="number" id="months" inputmode="numeric" min="1" max="600" step="1" value="12"></label>
+  </div>
+  <div class="grid2">
+    <label>이자 계산<select id="compound"><option value="0">단리</option><option value="1">월복리</option></select></label>
+    <label>과세<select id="tax"><option value="0.154">일반과세 (15.4%)</option><option value="0.095">세금우대 (9.5%)</option><option value="0">비과세</option></select></label>
+  </div>
+  <button type="submit">이자 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const kind = UI.val('kind');
+  UI.$('amount-label').textContent = kind === 'installment' ? '월 납입액' : '예치금';
+  const amount = UI.num('amount'), rate = UI.num('rate'), n = Math.round(UI.num('months'));
+  if (!amount || !rate || !n) return null;
+  if (n > 600) throw new Error('기간은 600개월까지 입력할 수 있습니다.');
+  const r = Calc.savings({ kind: kind, amount: amount, ratePct: rate, months: n, compound: UI.val('compound') === '1', taxRate: Number(UI.val('tax')) });
+  return UI.result(['세후 만기 수령액', Calc.won(r.total)], [
+    ['원금 합계', Calc.won(r.principal)],
+    ['세전 이자', Calc.won(r.interest)],
+    ['이자 과세', '−' + Calc.won(r.tax)],
+    ['세후 이자', Calc.won(r.net)],
+    ['원금 대비 세후 수익률',(r.net / r.principal * 100).toFixed(2) + '%'],
+  ], ['은행마다 원 단위 절사 방식이 달라 실제 금액과 몇 원 차이가 날 수 있습니다.']);
+});
+</script>
+<!-- guide -->
+<h2>적금 이자는 생각보다 적은 이유</h2>
+<p>적금 연 5%라고 해서 1년 뒤 납입 원금의 5%를 받는 게 아닙니다. 첫 달 넣은 돈은 12개월, 마지막 달 넣은 돈은 1개월 동안만 이자가 붙기 때문에 실제로는 <strong>약 절반</strong>(단리 기준 5% × 13/24 ≈ 2.7%)만 받습니다.</p>
+<p class="formula">적금 단리 이자 = 월 납입액 × 연이율 ÷ 12 × n(n+1) ÷ 2</p>
+<p class="formula">예금 단리 이자 = 예치금 × 연이율 × 개월 수 ÷ 12</p>
+
+<h2>이자에 붙는 세금</h2>
+<ul>
+  <li><strong>일반과세 15.4%:</strong> 소득세 14% + 지방소득세 1.4%</li>
+  <li><strong>세금우대 9.5%:</strong> 농협·수협·신협·새마을금고 조합원 예탁금 등 (상품별 한도 있음)</li>
+  <li><strong>비과세:</strong> ISA, 비과세종합저축(만 65세 이상, 장애인 등) 등</li>
+</ul>
+
+<h2>자주 묻는 질문</h2>
+<h3>단리와 월복리는 얼마나 차이 나나요?</h3>
+<p>1년 정도의 짧은 기간에는 차이가 크지 않습니다. 기간이 길고 금리가 높을수록 복리 효과가 커집니다.</p>
+<h3>예금과 적금 중 어느 쪽이 이자를 더 받나요?</h3>
+<p>같은 금리라면 목돈을 한 번에 넣는 예금이 이자를 더 받습니다. 적금은 목돈이 없을 때 돈을 모으는 수단으로 생각하는 게 좋습니다.</p>

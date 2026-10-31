@@ -1,0 +1,65 @@
+<!--
+{"slug": "severance", "title": "퇴직금 계산기", "category": "직장·급여", "order": 1,
+ "short": "입사일·퇴사일·급여로 예상 퇴직금",
+ "description": "입사일, 퇴사일, 최근 3개월 급여만 넣으면 예상 퇴직금을 바로 계산합니다. 평균임금 계산법, 지급 조건, 상여금·연차수당 반영 방법까지 정리했습니다.",
+ "lead": "근로자퇴직급여 보장법 기준으로 예상 퇴직금(세전)을 계산합니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>입사일<input type="date" id="start"></label>
+    <label>퇴사일 <small>마지막 근무일의 다음 날</small><input type="date" id="end"></label>
+  </div>
+  <label>최근 3개월 급여 총액 <small>세전 기본급 + 고정 수당</small><input class="money" id="wage" inputmode="numeric" placeholder="예: 9,000,000"></label>
+  <div class="grid2">
+    <label>연간 상여금 총액 <small>선택</small><input class="money" id="bonus" inputmode="numeric" placeholder="0"></label>
+    <label>연간 연차수당 <small>선택</small><input class="money" id="leave" inputmode="numeric" placeholder="0"></label>
+  </div>
+  <button type="submit">퇴직금 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.today('end');
+UI.bind('f', 'out', function () {
+  const start = UI.date('start'), end = UI.date('end'), wage = UI.num('wage');
+  if (!start || !end || !wage) return null;
+  if (end <= start) throw new Error('퇴사일은 입사일보다 뒤여야 합니다.');
+  const r = Calc.severance({ start: start, end: end, wage3m: wage, bonusYear: UI.num('bonus'), leavePay: UI.num('leave') });
+  const notes = [];
+  if (!r.eligible) notes.push('재직기간이 1년 미만이라 법정 퇴직금 지급 대상이 아닙니다. 아래 금액은 참고용입니다.');
+  notes.push('퇴직소득세가 원천징수되므로 실제 입금액은 이보다 조금 적습니다.');
+  return UI.result(['예상 퇴직금 (세전)', Calc.won(r.amount)], [
+    ['재직일수', Calc.comma(r.days) + '일 (약 ' + (r.days / 365).toFixed(1) + '년)'],
+    ['3개월 임금 총액', Calc.won(r.total3m)],
+    ['3개월 총일수', r.days3m + '일'],
+    ['1일 평균임금', Calc.won(r.avgDaily)],
+    ['한글 금액', Calc.korean(r.amount) + '원'],
+  ], notes);
+});
+</script>
+<!-- guide -->
+<h2>퇴직금 계산 공식</h2>
+<p class="formula">퇴직금 = 1일 평균임금 × 30일 × (재직일수 ÷ 365)</p>
+<p><strong>1일 평균임금</strong>은 퇴사일 이전 3개월 동안 받은 임금 총액을 그 3개월의 총일수(89~92일)로 나눈 값입니다. 여기에 1년 동안 받은 상여금과 연차수당의 3/12을 더합니다.</p>
+<p class="formula">1일 평균임금 = (3개월 급여 + 연간 상여금 × 3/12 + 연차수당 × 3/12) ÷ 3개월 총일수</p>
+
+<h2>퇴직금을 받을 수 있는 조건</h2>
+<ul>
+  <li>같은 사업장에서 <strong>1년 이상</strong> 계속 근로했을 것</li>
+  <li>4주 평균 <strong>주 15시간 이상</strong> 근무했을 것</li>
+  <li>정규직·계약직·아르바이트 등 고용 형태와 상관없이 위 조건만 맞으면 받을 수 있습니다.</li>
+</ul>
+<p>퇴직금은 퇴사일로부터 <strong>14일 이내</strong>에 지급해야 하며, 당사자가 합의하면 기한을 연장할 수 있습니다.</p>
+
+<h2>입력할 때 주의할 점</h2>
+<h3>퇴사일은 마지막 근무일의 다음 날</h3>
+<p>예를 들어 3월 31일까지 일했다면 퇴사일은 4월 1일입니다. 하루 차이로 재직기간이 1년이 되느냐가 갈릴 수 있으니 주의하세요.</p>
+<h3>3개월 급여에 넣는 것</h3>
+<p>기본급, 직책수당, 식대, 고정 연장근로수당처럼 매달 정기적으로 받은 세전 금액을 모두 더합니다. 경조사비나 실비 변상 성격의 출장비는 빼야 합니다.</p>
+<h3>평균임금이 통상임금보다 적다면</h3>
+<p>휴직 등으로 최근 3개월 급여가 평소보다 적어 평균임금이 통상임금보다 낮다면, 법에 따라 통상임금을 평균임금으로 보고 계산합니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>퇴직연금(DB·DC)에 가입한 경우도 같은가요?</h3>
+<p>확정급여형(DB)은 이 계산기 결과와 거의 같습니다. 확정기여형(DC)은 회사가 매년 연봉의 1/12 이상을 적립하고 운용 수익이 더해지므로 실제 금액이 다를 수 있습니다.</p>
+<h3>퇴직금에도 세금이 붙나요?</h3>
+<p>네. 퇴직소득세와 지방소득세가 원천징수됩니다. 근속연수가 길수록 공제가 커져 세율은 일반 근로소득보다 낮은 편입니다. IRP 계좌로 받으면 연금으로 수령할 때까지 과세가 미뤄집니다.</p>

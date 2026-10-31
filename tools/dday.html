@@ -1,0 +1,66 @@
+<!--
+{"slug": "dday", "title": "D-day 계산기", "category": "생활", "order": 2,
+ "short": "날짜 사이 일수·100일 기념일",
+ "description": "두 날짜 사이의 일수를 세는 D-day 계산과, 사귄 날·출생일로부터 100일·1000일 같은 기념일 날짜 계산을 한 번에 할 수 있습니다.",
+ "lead": "D-day, 날짜 사이 일수, 100일·1000일 기념일을 계산합니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>계산 방식</legend>
+    <div class="seg">
+      <label><input type="radio" name="mode" value="dday" checked> D-day (남은 날)</label>
+      <label><input type="radio" name="mode" value="anniv"> 기념일 (며칠째 되는 날)</label>
+    </div>
+  </fieldset>
+  <div class="grid2">
+    <label id="l1">시작일 <small>보통 오늘</small><input type="date" id="d1"></label>
+    <label id="l2">목표일<input type="date" id="d2"></label>
+  </div>
+  <label id="lN" hidden>며칠째? <small>시작일을 1일째로 셉니다</small><input type="number" id="n" inputmode="numeric" min="1" value="100"></label>
+  <button type="submit">계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.today('d1');
+UI.bind('f', 'out', function () {
+  const mode = UI.val('mode');
+  UI.$('l2').hidden = mode !== 'dday';
+  UI.$('lN').hidden = mode !== 'anniv';
+  UI.$('l1').firstChild.textContent = mode === 'dday' ? '시작일 ' : '처음 만난 날 / 출생일 ';
+  const d1 = UI.date('d1');
+  if (!d1) return null;
+  if (mode === 'dday') {
+    const d2 = UI.date('d2');
+    if (!d2) return null;
+    const diff = Calc.daysBetween(d1, d2);
+    const label = diff > 0 ? 'D-' + diff : diff < 0 ? 'D+' + (-diff) : 'D-Day';
+    return UI.result(['결과', label], [
+      ['두 날짜 차이', Calc.comma(Math.abs(diff)) + '일'],
+      ['시작일 포함', Calc.comma(Math.abs(diff) + 1) + '일'],
+      ['약', (Math.abs(diff) / 7).toFixed(1) + '주 · ' + (Math.abs(diff) / 30.44).toFixed(1) + '개월'],
+      ['목표일', Calc.fmtDate(d2)],
+    ]);
+  }
+  const n = Math.round(UI.num('n'));
+  if (!n) return null;
+  const target = Calc.addDays(d1, n - 1);
+  const rows = [100, 200, 300, 365, 500, 1000, 2000, 3000].map(function (k) {
+    return [k + '일', Calc.fmtDate(Calc.addDays(d1, k - 1))];
+  });
+  return UI.result([n + '일째 되는 날', Calc.fmtDate(target)], rows, ['처음 만난 날(또는 태어난 날)을 1일째로 세는 한국식 기준입니다.']);
+});
+</script>
+<!-- guide -->
+<h2>D-day 세는 법</h2>
+<p>D-day는 목표일 당일을 'D-Day'로, 그 전날을 'D-1'로 셉니다. 목표일이 지나면 'D+1', 'D+2'로 늘어납니다.</p>
+
+<h2>기념일은 왜 하루를 빼나요?</h2>
+<p>한국에서는 사귄 날이나 태어난 날을 <strong>1일째</strong>로 셉니다. 그래서 100일 기념일은 시작일로부터 99일 뒤입니다.</p>
+<p class="formula">N일째 되는 날 = 시작일 + (N − 1)일</p>
+<p>아기 백일도 같은 방식이라, 태어난 날을 1일로 셉니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>수능, 시험 D-day도 계산할 수 있나요?</h3>
+<p>네. 시작일에 오늘, 목표일에 시험 날짜를 넣으면 'D-남은 일수'가 나옵니다.</p>
+<h3>두 날짜 차이와 '시작일 포함'은 뭐가 다른가요?</h3>
+<p>3월 1일부터 3월 3일까지는 차이가 2일이지만, 첫날을 포함해 세면 3일입니다. 숙박 일수는 앞의 값, 근무 일수·복용 일수는 뒤의 값을 보통 씁니다.</p>

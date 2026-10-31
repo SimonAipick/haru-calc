@@ -1,0 +1,67 @@
+<!--
+{"slug": "annual-leave", "title": "연차 계산기", "category": "직장·급여", "order": 2,
+ "short": "입사일로 올해 연차 일수",
+ "description": "입사일만 입력하면 근로기준법에 따라 발생하는 연차휴가 일수를 계산합니다. 1년 미만 월차, 근속연수별 가산 연차 표까지 한눈에 확인하세요.",
+ "lead": "근로기준법 제60조 기준으로 발생하는 연차휴가 일수를 계산합니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>입사일<input type="date" id="start"></label>
+    <label>기준일 <small>보통 오늘</small><input type="date" id="ref"></label>
+  </div>
+  <button type="submit">연차 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.today('ref');
+UI.bind('f', 'out', function () {
+  const start = UI.date('start'), ref = UI.date('ref');
+  if (!start || !ref) return null;
+  if (ref < start) throw new Error('기준일은 입사일보다 뒤여야 합니다.');
+  const r = Calc.annualLeave(start, ref);
+  if (r.firstYear) {
+    return UI.result(['지금까지 발생한 연차', r.days + '일'], [
+      ['근속기간', r.months + '개월'],
+      ['1년 미만 최대', '11일'],
+    ], ['입사 1년 미만에는 1개월 개근할 때마다 1일씩, 최대 11일이 생깁니다. 1년을 채우고 80% 이상 출근하면 15일이 새로 생깁니다.']);
+  }
+  const next = r.years >= 21 ? r.days : Math.min(25, 15 + Math.floor(r.years / 2));
+  return UI.result(['올해 연차', r.days + '일'], [
+    ['근속연수', r.years + '년'],
+    ['내년 연차 (예상)', next + '일'],
+  ], ['직전 1년 출근율이 80% 이상일 때 기준입니다. 80% 미만이면 개근한 달마다 1일씩 생깁니다.']);
+});
+</script>
+<!-- guide -->
+<h2>연차가 생기는 규칙</h2>
+<ul>
+  <li><strong>입사 1년 미만:</strong> 1개월 개근할 때마다 1일, 최대 11일</li>
+  <li><strong>1년 이상 근무 + 출근율 80% 이상:</strong> 15일</li>
+  <li><strong>3년 이상 근무:</strong> 최초 1년을 넘는 근속 2년마다 1일씩 추가, 최대 25일</li>
+</ul>
+<p class="formula">연차 일수 = 15 + (근속연수 − 1) ÷ 2 (소수점 버림, 최대 25일)</p>
+
+<h2>근속연수별 연차 일수표</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>근속연수</th><th>연차</th><th>근속연수</th><th>연차</th></tr></thead>
+  <tbody>
+    <tr><td>1년</td><td>15일</td><td>11년</td><td>20일</td></tr>
+    <tr><td>2년</td><td>15일</td><td>13년</td><td>21일</td></tr>
+    <tr><td>3년</td><td>16일</td><td>15년</td><td>22일</td></tr>
+    <tr><td>5년</td><td>17일</td><td>17년</td><td>23일</td></tr>
+    <tr><td>7년</td><td>18일</td><td>19년</td><td>24일</td></tr>
+    <tr><td>9년</td><td>19일</td><td>21년 이상</td><td>25일</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>자주 묻는 질문</h2>
+<h3>회계연도 기준으로 연차를 주는 회사는요?</h3>
+<p>많은 회사가 관리 편의를 위해 매년 1월 1일 기준으로 연차를 일괄 부여합니다. 이 경우 입사 첫해에는 근무한 기간에 비례해 연차를 주고, 퇴사할 때 입사일 기준으로 다시 계산해 근로자에게 불리하지 않게 정산해야 합니다.</p>
+<h3>쓰지 못한 연차는 어떻게 되나요?</h3>
+<p>연차는 생긴 날부터 1년 안에 쓰지 않으면 소멸하지만, 회사가 연차 사용 촉진 절차를 밟지 않았다면 남은 일수만큼 연차수당으로 받을 수 있습니다.</p>
+<h3>딱 1년만 일하고 퇴사하면 연차가 26일인가요?</h3>
+<p>2021년 대법원 판결에 따라 1년 계약이 끝나고 바로 퇴사하면 2년차 연차 15일은 생기지 않고, 1년 미만 연차 최대 11일만 인정됩니다. 1년을 넘겨 하루라도 더 근무해야 15일이 추가로 생깁니다.</p>
+<h3>5인 미만 사업장도 연차가 있나요?</h3>
+<p>상시 근로자 5인 미만 사업장은 연차휴가 규정이 적용되지 않아 법적으로 연차가 의무가 아닙니다.</p>

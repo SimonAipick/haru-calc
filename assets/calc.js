@@ -1,0 +1,243 @@
+/* 계산 로직(Calc)과 화면 연결 도우미(UI). 각 도구 페이지의 인라인 스크립트가 이 둘을 사용한다. */
+(function (global) {
+  'use strict';
+
+  const DAY = 86400000;
+  const PYEONG = 400 / 121; // 1평 = 3.305785...㎡
+
+  // ---------- 날짜 ----------
+  function toUTC(d) { return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function parseDate(s) {
+    if (!s) return null;
+    const [y, m, d] = s.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+  }
+  function daysBetween(a, b) { return Math.round((toUTC(b) - toUTC(a)) / DAY); }
+  function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  // 말일 보정: 1월 31일 + 1개월 = 2월 28(29)일
+  function addMonths(d, n) {
+    const y = d.getFullYear(), m = d.getMonth() + n;
+    const last = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(d.getDate(), last));
+  }
+  function fullYears(from, to) {
+    let y = to.getFullYear() - from.getFullYear();
+    if (to.getMonth() < from.getMonth() || (to.getMonth() === from.getMonth() && to.getDate() < from.getDate())) y--;
+    return y;
+  }
+  function fullMonths(from, to) {
+    let m = (to.getFullYear() - from.getFullYear()) * 12 + to.getMonth() - from.getMonth();
+    if (to.getDate() < from.getDate()) m--;
+    return m;
+  }
+  function fmtDate(d) {
+    const w = '일월화수목금토'[d.getDay()];
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${w})`;
+  }
+
+  // ---------- 직장·급여 ----------
+  // end는 퇴사일(마지막 근무일의 다음 날)
+  function severance(o) {
+    const days = daysBetween(o.start, o.end);
+    const days3m = daysBetween(addMonths(o.end, -3), o.end);
+    const total3m = o.wage3m + (o.bonusYear || 0) * 3 / 12 + (o.leavePay || 0) * 3 / 12;
+    const avgDaily = total3m / days3m;
+    return { days, eligible: days >= 365, days3m, total3m, avgDaily, amount: avgDaily * 30 * days / 365 };
+  }
+
+  function annualLeave(start, ref) {
+    const years = fullYears(start, ref);
+    if (years < 1) {
+      const months = Math.min(11, Math.max(0, fullMonths(start, ref)));
+      return { years: 0, months, days: months, firstYear: true };
+    }
+    return { years, days: Math.min(25, 15 + Math.floor((years - 1) / 2)), firstYear: false };
+  }
+
+  // 주 15시간 이상이면 (주 소정근로시간 / 40) × 8시간, 40시간 초과분은 반영하지 않음
+  function weeklyHolidayHours(h) { return h >= 15 ? Math.min(h, 40) / 40 * 8 : 0; }
+  function monthlyHours(h) { return Math.round((h + weeklyHolidayHours(h)) * 365 / 7 / 12); }
+
+  // ---------- 금융 ----------
+  // method: 'annuity'(원리금균등) | 'principal'(원금균등) | 'bullet'(만기일시)
+  function loan(P, ratePct, n, method) {
+    const r = ratePct / 100 / 12;
+    const pmt = r === 0 ? P / n : P * r / (1 - Math.pow(1 + r, -n));
+    const rows = [];
+    let bal = P, totalInterest = 0;
+    for (let k = 1; k <= n; k++) {
+      const interest = bal * r;
+      let principal;
+      if (k === n) principal = bal;
+      else if (method === 'annuity') principal = pmt - interest;
+      else if (method === 'principal') principal = P / n;
+      else principal = 0;
+      bal -= principal;
+      totalInterest += interest;
+      rows.push({ k, payment: principal + interest, principal, interest, balance: Math.max(0, bal) });
+    }
+    return { rows, totalInterest, totalPayment: P + totalInterest };
+  }
+
+  // kind: 'installment'(적금, 매월 amount 납입) | 'deposit'(예금, amount 일시 예치)
+  function savings(o) {
+    const r = o.ratePct / 100 / 12, n = o.months;
+    let principal, interest;
+    if (o.kind === 'installment') {
+      principal = o.amount * n;
+      if (o.compound) {
+        interest = 0;
+        for (let k = 1; k <= n; k++) interest += o.amount * (Math.pow(1 + r, k) - 1);
+      } else {
+        interest = o.amount * r * n * (n + 1) / 2;
+      }
+    } else {
+      principal = o.amount;
+      interest = o.compound ? o.amount * (Math.pow(1 + r, n) - 1) : o.amount * r * n;
+    }
+    const tax = Math.floor(interest * o.taxRate);
+    return { principal, interest, tax, net: interest - tax, total: principal + interest - tax };
+  }
+
+  // ---------- 생활 ----------
+  // 2월 29일생은 평년에 2월 28일로 본다
+  function birthdayIn(year, birth) {
+    const last = new Date(year, birth.getMonth() + 1, 0).getDate();
+    return new Date(year, birth.getMonth(), Math.min(birth.getDate(), last));
+  }
+  function age(birth, ref) {
+    let next = birthdayIn(ref.getFullYear(), birth);
+    if (toUTC(next) < toUTC(ref)) next = birthdayIn(ref.getFullYear() + 1, birth);
+    return {
+      man: fullYears(birth, ref),
+      year: ref.getFullYear() - birth.getFullYear(),
+      counting: ref.getFullYear() - birth.getFullYear() + 1,
+      daysLived: daysBetween(birth, ref),
+      nextBirthday: next,
+      untilBirthday: daysBetween(ref, next),
+    };
+  }
+
+  // 한국 기준(대한비만학회)
+  function bmi(cm, kg) {
+    const v = kg / Math.pow(cm / 100, 2);
+    let label;
+    if (v < 18.5) label = '저체중';
+    else if (v < 23) label = '정상';
+    else if (v < 25) label = '비만 전단계(과체중)';
+    else if (v < 30) label = '1단계 비만';
+    else if (v < 35) label = '2단계 비만';
+    else label = '3단계 비만(고도비만)';
+    const m2 = Math.pow(cm / 100, 2);
+    return { value: v, label, normalMin: 18.5 * m2, normalMax: 22.9 * m2 };
+  }
+
+  // ---------- 표시 ----------
+  function comma(n, digits) {
+    if (!isFinite(n)) return '-';
+    return n.toLocaleString('ko-KR', { maximumFractionDigits: digits == null ? 0 : digits });
+  }
+  function won(n) { return comma(Math.round(n)) + '원'; }
+  // 123456789 -> "1억 2,345만 6,789"
+  function korean(n) {
+    n = Math.round(n);
+    if (Math.abs(n) < 10000) return comma(n);
+    const sign = n < 0 ? '-' : '';
+    n = Math.abs(n);
+    const parts = [];
+    const jo = Math.floor(n / 1e12), eok = Math.floor(n % 1e12 / 1e8), man = Math.floor(n % 1e8 / 1e4), rest = n % 1e4;
+    if (jo) parts.push(comma(jo) + '조');
+    if (eok) parts.push(comma(eok) + '억');
+    if (man) parts.push(comma(man) + '만');
+    if (rest) parts.push(comma(rest));
+    return sign + parts.join(' ');
+  }
+
+  global.Calc = {
+    PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
+    severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
+    comma, won, korean,
+  };
+
+  // ---------- 화면 연결 ----------
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function num(id) {
+    const el = $(id);
+    if (!el) return 0;
+    const v = parseFloat(String(el.value).replace(/,/g, ''));
+    return isFinite(v) ? v : 0;
+  }
+  function date(id) { return parseDate($(id).value); }
+  function val(id) {
+    const el = $(id);
+    if (el) return el.value;
+    const checked = document.querySelector(`input[name="${id}"]:checked`);
+    return checked ? checked.value : '';
+  }
+  function today(id) {
+    const d = new Date();
+    $(id).value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // 금액 입력칸에 천 단위 쉼표를 넣고, 커서 위치는 숫자 개수 기준으로 유지
+  function formatMoneyInput(el) {
+    const pos = el.selectionStart || 0;
+    const digitsBefore = el.value.slice(0, pos).replace(/[^\d]/g, '').length;
+    const raw = el.value.replace(/[^\d]/g, '');
+    el.value = raw ? Number(raw).toLocaleString('ko-KR') : '';
+    let i = 0, seen = 0;
+    while (i < el.value.length && seen < digitsBefore) { if (/\d/.test(el.value[i])) seen++; i++; }
+    try { el.setSelectionRange(i, i); } catch (e) { /* 포커스 없는 경우 */ }
+    const hint = el.parentElement.querySelector('.unit-hint');
+    if (hint) hint.textContent = raw && Number(raw) >= 10000 ? korean(Number(raw)) + '원' : '';
+  }
+
+  // headline: [라벨, 값], rows: [[라벨, 값], ...], notes: [문장, ...]
+  function result(headline, rows, notes) {
+    let h = '';
+    if (headline) h += `<div class="headline"><span>${esc(headline[0])}</span><strong>${headline[1]}</strong></div>`;
+    if (rows && rows.length) {
+      h += '<dl class="rows">' + rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('') + '</dl>';
+    }
+    (notes || []).forEach((n) => { h += `<p class="note">${n}</p>`; });
+    return h;
+  }
+
+  // compute()가 HTML을 돌려주면 표시, null이면 안내 문구, 예외면 오류 문구
+  function bind(formId, outId, compute) {
+    const form = $(formId), out = $(outId);
+    const placeholder = '<p class="hint">값을 입력하면 바로 계산됩니다.</p>';
+    function run() {
+      try {
+        const html = compute();
+        out.innerHTML = html || placeholder;
+        out.classList.toggle('filled', !!html);
+      } catch (e) {
+        out.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+        out.classList.remove('filled');
+      }
+    }
+    form.querySelectorAll('input.money').forEach((el) => {
+      if (!el.parentElement.querySelector('.unit-hint')) {
+        const s = document.createElement('span');
+        s.className = 'unit-hint';
+        el.insertAdjacentElement('afterend', s);
+      }
+      el.addEventListener('input', () => formatMoneyInput(el));
+      if (el.value) formatMoneyInput(el);
+    });
+    form.addEventListener('input', run);
+    form.addEventListener('change', run);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      run();
+      out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    run();
+  }
+
+  global.UI = { $, esc, num, date, val, today, result, bind };
+})(window);
