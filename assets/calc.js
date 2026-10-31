@@ -59,6 +59,83 @@
   function weeklyHolidayHours(h) { return h >= 15 ? Math.min(h, 40) / 40 * 8 : 0; }
   function monthlyHours(h) { return Math.round((h + weeklyHolidayHours(h)) * 365 / 7 / 12); }
 
+  // 구직급여: 2026-01-01 이후 이직자 기준 (고용보험법 시행령 제68조, 고용노동부 FAQ)
+  const UI_RULES = {
+    dailyCap: 68100,          // 1일 상한 (기초일액 상한 113,500원 × 60%)
+    minWage: 10320,           // 2026년 최저시급
+    days: {                   // 소정급여일수 [1년 미만, 1~3년, 3~5년, 5~10년, 10년 이상]
+      under50: [120, 150, 180, 210, 240],
+      over50: [120, 180, 210, 240, 270],
+    },
+  };
+  // insured: 0~4 (가입기간 구간 인덱스), end: 이직일 다음 날(퇴사일)
+  function unemployment(o) {
+    const days3m = daysBetween(addMonths(o.end, -3), o.end);
+    const avgDaily = o.wage3m / days3m;
+    const hours = Math.min(8, Math.max(1, o.dailyHours || 8));
+    const floor = UI_RULES.minWage * 0.8 * hours;
+    const raw = avgDaily * 0.6;
+    const daily = Math.max(floor, Math.min(raw, UI_RULES.dailyCap));
+    const payDays = UI_RULES.days[o.over50 ? 'over50' : 'under50'][o.insured];
+    return { days3m, avgDaily, raw, floor, cap: UI_RULES.dailyCap, daily, payDays, total: daily * payDays,
+      capped: raw > UI_RULES.dailyCap, floored: raw < floor };
+  }
+
+  // 육아휴직 급여 (고용보험법 시행령 제95조, 제95조의3, 2025-01-01 시행 기준)
+  function parentalLeave(monthlyWage, months, sixPlusSix) {
+    const SIX = [2500000, 2500000, 3000000, 3500000, 4000000, 4500000];
+    const rows = [];
+    let total = 0;
+    for (let m = 1; m <= months; m++) {
+      let rate, cap;
+      if (sixPlusSix && m <= 6) { rate = 1; cap = SIX[m - 1]; }
+      else if (m <= 3) { rate = 1; cap = 2500000; }
+      else if (m <= 6) { rate = 1; cap = 2000000; }
+      else { rate = 0.8; cap = 1600000; }
+      const amount = Math.max(700000, Math.min(monthlyWage * rate, cap));
+      rows.push({ m, rate, cap, amount });
+      total += amount;
+    }
+    return { rows, total };
+  }
+
+  // 주택 중개보수 상한 (공인중개사법 시행규칙 제20조, 2021-10-19 개정)
+  const BROKER = {
+    sale: [[5e7, 0.006, 250000], [2e8, 0.005, 800000], [9e8, 0.004, 0], [12e8, 0.005, 0], [15e8, 0.006, 0], [Infinity, 0.007, 0]],
+    lease: [[5e7, 0.005, 200000], [1e8, 0.004, 300000], [6e8, 0.003, 0], [12e8, 0.004, 0], [15e8, 0.005, 0], [Infinity, 0.006, 0]],
+  };
+  function brokerage(kind, price, deposit, monthly) {
+    let amount = kind === 'sale' ? price : deposit + monthly * 100;
+    let rentBase = null;
+    if (kind === 'lease' && monthly > 0) {
+      rentBase = 100;
+      if (amount < 5e7) { amount = deposit + monthly * 70; rentBase = 70; }
+    }
+    const [, rate, limit] = BROKER[kind].find(([upper]) => amount < upper);
+    const raw = amount * rate;
+    const fee = limit ? Math.min(raw, limit) : raw;
+    return { amount, rate, limit, fee, rentBase };
+  }
+
+  // 전월세 전환율 상한 (주택임대차보호법 시행령 제9조) = min(10%, 기준금리 + 2%p)
+  const BASE_RATE = { value: 3.0, asOf: '2026-08-27' };
+  function legalConversionRate(base) {
+    return Math.min(10, (base == null ? BASE_RATE.value : base) + 2);
+  }
+
+  // 군 복무기간(개월), 병무청 기준
+  const SERVICE = {
+    army: ['육군', 18], marine: ['해병대', 18], navy: ['해군', 20], airforce: ['공군', 21],
+    reserve: ['상근예비역', 18], social: ['사회복무요원', 21], alternative: ['대체복무요원', 36],
+  };
+  // 입영일부터 기산: 입영일 + N개월의 전날. 해당 날짜가 없는 달이면 그 달 말일 (민법 제160조)
+  function discharge(entry, months) {
+    const y = entry.getFullYear(), m = entry.getMonth() + months;
+    const last = new Date(y, m + 1, 0).getDate();
+    if (entry.getDate() > last) return new Date(y, m, last);
+    return addDays(new Date(y, m, entry.getDate()), -1);
+  }
+
   // ---------- 금융 ----------
   // method: 'annuity'(원리금균등) | 'principal'(원금균등) | 'bullet'(만기일시)
   function loan(P, ratePct, n, method) {
@@ -157,6 +234,7 @@
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
+    UNEMPLOYMENT: UI_RULES, unemployment, parentalLeave, brokerage, BASE_RATE, legalConversionRate, SERVICE, discharge,
     comma, won, korean,
   };
 

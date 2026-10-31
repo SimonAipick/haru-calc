@@ -1,0 +1,66 @@
+<!--
+{"slug": "military-discharge", "title": "군 전역일 계산기", "category": "생활", "order": 6,
+ "short": "입대일로 전역일·남은 날",
+ "description": "입대일과 군별(육군·해군·공군·해병대·사회복무요원)을 선택하면 전역일(소집해제일), 남은 날짜, 복무 진행률을 계산합니다. 2026년 병무청 복무기간 기준.",
+ "lead": "입대일과 복무 형태로 전역일과 남은 복무일을 계산합니다."}
+-->
+<!-- 근거: 병무청 복무기간 https://mma.go.kr/contents.do?mc=usr0000041 · 병역법 제18조(입영일부터 기산) · 민법 제160조 -->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>입대일 (입영일)<input type="date" id="entry"></label>
+    <label>복무 형태<select id="type">
+      <option value="army">육군 (18개월)</option><option value="marine">해병대 (18개월)</option>
+      <option value="navy">해군 (20개월)</option><option value="airforce">공군 (21개월)</option>
+      <option value="reserve">상근예비역 (18개월)</option><option value="social">사회복무요원 (21개월)</option>
+      <option value="alternative">대체복무요원 (36개월)</option></select></label>
+  </div>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const entry = UI.date('entry');
+  if (!entry) return null;
+  const s = Calc.SERVICE[UI.val('type')];
+  const end = Calc.discharge(entry, s[1]);
+  const t = new Date(); const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const total = Calc.daysBetween(entry, end) + 1;
+  const served = Math.min(total, Math.max(0, Calc.daysBetween(entry, today) + 1));
+  const left = Calc.daysBetween(today, end);
+  const rows = [
+    ['복무 기간', s[0] + ' ' + s[1] + '개월 (' + Calc.comma(total) + '일)'],
+    ['오늘 기준', left > 0 ? 'D-' + Calc.comma(left) : left === 0 ? '오늘 전역!' : '전역 후 ' + Calc.comma(-left) + '일'],
+    ['복무한 날', Calc.comma(served) + '일'],
+    ['진행률', (served / total * 100).toFixed(1) + '%'],
+  ];
+  const bar = '<div style="margin-top:12px;height:10px;border-radius:5px;background:var(--line);overflow:hidden"><div style="height:100%;width:' + (served / total * 100).toFixed(1) + '%;background:var(--accent)"></div></div>';
+  return UI.result([s[0] === '사회복무요원' || s[0] === '대체복무요원' ? '소집해제일' : '전역일', Calc.fmtDate(end)], rows,
+    ['휴가 사용과 관계없이 전역일은 같습니다. 영창(군기교육)·탈영 등 복무기간에 넣지 않는 기간이 있으면 그만큼 늦어집니다.']) + bar;
+});
+</script>
+<!-- guide -->
+<h2>복무 기간 (2026년 병무청 기준)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>구분</th><th>복무 기간</th></tr></thead>
+  <tbody>
+    <tr><td>육군·해병대</td><td>18개월</td></tr>
+    <tr><td>해군</td><td>20개월</td></tr>
+    <tr><td>공군</td><td>21개월</td></tr>
+    <tr><td>상근예비역</td><td>18개월</td></tr>
+    <tr><td>사회복무요원</td><td>21개월</td></tr>
+    <tr><td>대체복무요원</td><td>36개월</td></tr>
+  </tbody>
+</table>
+</div>
+<p>2018년 발표된 단계적 복무기간 단축은 2020년 6월 이후 입영자부터 위 기간으로 끝났고, 현재 추가 단축 계획은 발표된 것이 없습니다.</p>
+
+<h2>전역일 계산 방법</h2>
+<p class="formula">전역일 = 입대일 + 복무 개월 수 − 1일</p>
+<p>복무 기간은 입대한 날부터 셉니다. 그래서 2026년 1월 5일에 육군으로 입대하면 18개월 뒤인 2027년 7월 5일의 하루 전, <strong>2027년 7월 4일</strong>이 전역일입니다.</p>
+<p>8월 31일처럼 끝나는 달에 같은 날짜가 없으면 그 달의 마지막 날이 전역일입니다(민법의 기간 계산 규칙).</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>말년 휴가를 쓰면 전역이 빨라지나요?</h3>
+<p>아닙니다. 휴가는 복무기간에 포함되므로 전역일은 같습니다. 다만 남은 휴가를 전역일 직전에 붙여 쓰면 부대에서 일찍 나올 수는 있습니다.</p>
+<h3>사회복무요원도 같은 방식인가요?</h3>
+<p>네. 소집일부터 21개월을 세고, 마지막 날이 소집해제일입니다. 병가 초과 등으로 복무를 연장하는 경우는 기관에서 따로 안내합니다.</p>

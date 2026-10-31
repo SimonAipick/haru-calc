@@ -1,0 +1,71 @@
+<!--
+{"slug": "parental-leave", "title": "육아휴직 급여 계산기", "category": "직장·급여", "order": 6,
+ "short": "월별 육아휴직 급여·6+6",
+ "description": "통상임금과 휴직 기간을 넣으면 2025년 개편된 육아휴직 급여를 월별로 계산합니다. 6+6 부모육아휴직제 특례(최대 월 450만원)와 사후지급금 폐지까지 반영했습니다.",
+ "lead": "월 통상임금과 휴직 개월 수로 육아휴직 급여를 월별로 계산합니다."}
+-->
+<!-- 근거: 고용보험법 시행령 제95조·제95조의3 (2025-01-01 시행)
+     https://www.bokjiro.go.kr/ssis-tbu/cms/pc/news/promotion/1307361_1118.html -->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>월 통상임금 <small>세전, 기본급 + 고정수당</small><input class="money" id="wage" inputmode="numeric" placeholder="예: 3,500,000"></label>
+    <label>휴직 기간 (개월)<input type="number" id="months" inputmode="numeric" min="1" max="18" step="1" value="12"></label>
+  </div>
+  <fieldset>
+    <legend>6+6 부모육아휴직제</legend>
+    <div class="seg">
+      <label><input type="radio" name="six" value="0" checked> 해당 없음</label>
+      <label><input type="radio" name="six" value="1"> 적용 (생후 18개월 내 부모 모두 휴직)</label>
+    </div>
+  </fieldset>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const wage = UI.num('wage'), months = Math.round(UI.num('months'));
+  if (!wage || !months) return null;
+  if (months > 18) throw new Error('육아휴직은 최대 18개월(부모 모두 3개월 이상 사용 시)까지입니다.');
+  const six = UI.val('six') === '1';
+  const r = Calc.parentalLeave(wage, months, six);
+  const notes = [];
+  if (months > 12) notes.push('12개월을 넘는 휴직(최대 18개월)은 부모가 모두 3개월 이상 육아휴직을 쓴 경우 등에만 가능합니다.');
+  notes.push('2025년부터 사후지급금(25%)이 폐지되어 휴직 기간 중 전액을 받습니다.');
+  const table = '<details open><summary>월별 지급액</summary><div class="table-wrap"><table><thead><tr><th>개월</th><th>지급률</th><th>상한</th><th>지급액</th></tr></thead><tbody>'
+    + r.rows.map(function (x) {
+      return '<tr><td>' + x.m + '개월째</td><td>' + Math.round(x.rate * 100) + '%</td><td>' + Calc.comma(x.cap / 10000) + '만원</td><td>' + Calc.comma(Math.round(x.amount)) + '원</td></tr>';
+    }).join('') + '</tbody></table></div></details>';
+  return UI.result(['총 육아휴직 급여', Calc.won(r.total)], [
+    ['월 평균', Calc.won(r.total / months)],
+    ['첫 달', Calc.won(r.rows[0].amount)],
+  ], notes) + table;
+});
+</script>
+<!-- guide -->
+<h2>2025년부터 바뀐 육아휴직 급여</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>기간</th><th>지급률</th><th>월 상한</th></tr></thead>
+  <tbody>
+    <tr><td>1~3개월</td><td>통상임금 100%</td><td>250만원</td></tr>
+    <tr><td>4~6개월</td><td>통상임금 100%</td><td>200만원</td></tr>
+    <tr><td>7개월 이후</td><td>통상임금 80%</td><td>160만원</td></tr>
+  </tbody>
+</table>
+</div>
+<p>모든 구간의 하한은 <strong>월 70만원</strong>입니다. 예전에는 급여의 25%를 복직 6개월 뒤에 주는 사후지급금이 있었지만 2025년 1월 1일부터 폐지되어, 이제는 휴직 중에 전액을 받습니다.</p>
+
+<h2>6+6 부모육아휴직제</h2>
+<p>자녀가 생후 18개월이 되기 전에 부모가 <strong>모두</strong> 육아휴직을 하면, 각자 첫 6개월 동안 통상임금의 100%를 아래 상한까지 받습니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>개월</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr></thead>
+  <tbody><tr><td>월 상한</td><td>250만</td><td>250만</td><td>300만</td><td>350만</td><td>400만</td><td>450만</td></tr></tbody>
+</table>
+</div>
+<p>상한을 모두 더하면 6개월 동안 한 사람당 최대 2,000만원입니다. 7개월째부터는 일반 육아휴직과 같이 80%, 상한 160만원입니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>통상임금은 어떻게 확인하나요?</h3>
+<p>기본급과 매달 고정으로 받는 수당(직책수당, 고정 식대 등)의 합입니다. 성과급이나 연장근로수당처럼 매달 달라지는 금액은 보통 빠집니다. 급여명세서나 회사 인사팀에서 확인할 수 있습니다.</p>
+<h3>육아휴직 급여에 세금이 붙나요?</h3>
+<p>육아휴직 급여는 비과세입니다. 계산된 금액을 그대로 받습니다.</p>

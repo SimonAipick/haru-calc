@@ -1,0 +1,83 @@
+<!--
+{"slug": "unemployment", "title": "실업급여 계산기", "category": "직장·급여", "order": 5,
+ "short": "2026년 기준 하루·총 실업급여",
+ "description": "퇴사 전 3개월 급여, 나이, 고용보험 가입기간으로 2026년 기준 실업급여(구직급여) 1일 지급액과 받는 기간, 총액을 계산합니다. 상한액 68,100원, 하한액 66,048원 반영.",
+ "lead": "2026년 이직자 기준으로 실업급여(구직급여) 예상액을 계산합니다."}
+-->
+<!-- 근거: 고용보험법 시행령 제68조(2025-12-23 개정, 상한 68,100원) https://www.segye.com/newsView/20251216507484
+     소정급여일수 https://www.moel.go.kr/faq/faqView.do?seqRepeat=204 · 2026 최저시급 10,320원 -->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>퇴사일 <small>마지막 근무일의 다음 날</small><input type="date" id="end"></label>
+    <label>퇴사 전 3개월 급여 총액 <small>세전</small><input class="money" id="wage" inputmode="numeric" placeholder="예: 9,000,000"></label>
+  </div>
+  <div class="grid2">
+    <label>퇴사일 기준 나이<select id="age"><option value="0">50세 미만</option><option value="1">50세 이상 또는 장애인</option></select></label>
+    <label>고용보험 가입기간<select id="insured">
+      <option value="0">1년 미만</option><option value="1" selected>1년 이상 ~ 3년 미만</option><option value="2">3년 이상 ~ 5년 미만</option>
+      <option value="3">5년 이상 ~ 10년 미만</option><option value="4">10년 이상</option></select></label>
+  </div>
+  <label>1일 소정근로시간 <small>보통 8시간, 단시간 근로자는 실제 시간</small><input type="number" id="hours" inputmode="decimal" min="1" max="8" step="0.5" value="8"></label>
+  <button type="submit">실업급여 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.today('end');
+UI.bind('f', 'out', function () {
+  const end = UI.date('end'), wage = UI.num('wage');
+  if (!end || !wage) return null;
+  const r = Calc.unemployment({ end: end, wage3m: wage, over50: UI.val('age') === '1', insured: Number(UI.val('insured')), dailyHours: UI.num('hours') });
+  const notes = [];
+  if (r.capped) notes.push('계산상 금액이 1일 상한액(68,100원)을 넘어 상한액이 적용됐습니다.');
+  if (r.floored) notes.push('계산상 금액이 하한액보다 적어 하한액(최저임금의 80%)이 적용됐습니다.');
+  if (end.getFullYear() >= 2027) notes.push('2027년 이직자는 최저임금 인상(10,700원)과 제도 개편(주 6일 지급 등)이 예정돼 있어 실제 금액이 달라질 수 있습니다.');
+  if (end.getFullYear() < 2026) notes.push('2025년 이전 이직자는 상한액이 66,000원이었습니다.');
+  notes.push('비자발적 퇴사 등 수급 자격을 갖춘 경우의 예상액이며, 최종 금액은 고용센터가 결정합니다.');
+  return UI.result(['예상 총 수령액', Calc.won(r.total)], [
+    ['1일 구직급여', Calc.won(r.daily)],
+    ['받는 기간 (소정급여일수)', r.payDays + '일 (약 ' + (r.payDays / 30).toFixed(1) + '개월)'],
+    ['한 달(30일) 기준', Calc.won(r.daily * 30)],
+    ['1일 평균임금', Calc.won(r.avgDaily) + ' (3개월 ' + r.days3m + '일 기준)'],
+    ['평균임금의 60%', Calc.won(r.raw)],
+  ], notes);
+});
+</script>
+<!-- guide -->
+<h2>실업급여 계산 공식 (2026년)</h2>
+<p class="formula">1일 구직급여 = 퇴사 전 1일 평균임금 × 60%  (하한 66,048원 ~ 상한 68,100원)</p>
+<p class="formula">총 수령액 = 1일 구직급여 × 소정급여일수</p>
+<ul>
+  <li><strong>1일 평균임금:</strong> 퇴사 전 3개월 임금 총액 ÷ 그 3개월의 총일수</li>
+  <li><strong>상한액:</strong> 2026년 1월 1일 이후 이직자부터 하루 <strong>68,100원</strong> (2025년까지는 66,000원)</li>
+  <li><strong>하한액:</strong> 최저시급 × 80% × 1일 소정근로시간. 2026년 8시간 근무자는 10,320원 × 0.8 × 8 = <strong>66,048원</strong></li>
+</ul>
+<p>상한과 하한의 차이가 크지 않아서, 하루 8시간 근무한 대부분의 사람은 하루 66,048~68,100원 사이를 받습니다. 결국 총액을 좌우하는 것은 <strong>받는 기간</strong>입니다.</p>
+
+<h2>받는 기간 (소정급여일수)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>고용보험 가입기간</th><th>50세 미만</th><th>50세 이상·장애인</th></tr></thead>
+  <tbody>
+    <tr><td>1년 미만</td><td>120일</td><td>120일</td></tr>
+    <tr><td>1년 ~ 3년 미만</td><td>150일</td><td>180일</td></tr>
+    <tr><td>3년 ~ 5년 미만</td><td>180일</td><td>210일</td></tr>
+    <tr><td>5년 ~ 10년 미만</td><td>210일</td><td>240일</td></tr>
+    <tr><td>10년 이상</td><td>240일</td><td>270일</td></tr>
+  </tbody>
+</table>
+</div>
+<p>나이는 퇴사일 기준이고, 가입기간은 여러 회사에서 가입한 기간을 합칠 수 있습니다(이전에 실업급여를 받았다면 그 이전 기간은 빠집니다).</p>
+
+<h2>받을 수 있는 조건</h2>
+<ul>
+  <li>퇴사 전 18개월 동안 고용보험 가입 사업장에서 <strong>180일 이상</strong> 근무(유급 근로일 기준)</li>
+  <li>권고사직, 계약만료, 폐업 등 <strong>비자발적 퇴사</strong>. 자발적 퇴사라도 임금체불, 통근 곤란, 질병 등 정당한 사유가 있으면 가능</li>
+  <li>일할 능력과 의사가 있고, 적극적으로 재취업 활동을 할 것</li>
+</ul>
+<p>퇴사 후 워크넷 구직 등록과 고용센터 수급자격 신청을 해야 하며, 퇴사 다음 날부터 <strong>12개월 안에</strong> 다 받아야 합니다. 신청이 늦으면 남은 날짜를 잃을 수 있습니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>월급이 많으면 실업급여도 많나요?</h3>
+<p>아니요. 상한액이 있어서 평균임금이 하루 113,500원(월 약 340만원)을 넘으면 모두 68,100원을 받습니다.</p>
+<h3>2027년에는 바뀌나요?</h3>
+<p>2027년 최저시급이 10,700원으로 오르고, 지급 기준을 주 6일로 바꾸는 개편이 추진 중입니다. 2027년 이직자는 고용센터 안내를 꼭 확인하세요.</p>
