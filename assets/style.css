@@ -61,6 +61,9 @@ h3 { font-size: 17px; margin: 24px 0 6px; }
 }
 .calc label { display: grid; gap: 6px; font-weight: 600; font-size: 15px; }
 .calc label small { font-weight: 400; color: var(--muted); }
+.calc label.check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; font-size: 14px; }
+.calc label.check input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; }
+.calc fieldset + fieldset { margin-top: 10px; }
 .calc fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
 .calc legend { font-weight: 600; font-size: 15px; margin-bottom: 6px; padding: 0; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }

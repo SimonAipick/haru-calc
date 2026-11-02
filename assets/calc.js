@@ -136,6 +136,121 @@
     return addDays(new Date(y, m, entry.getDate()), -1);
   }
 
+  // ---------- 연말정산 (2026년 귀속, 근로소득만 있는 경우) ----------
+  // 근거: 소득세법 제47조·제50조·제51조·제55조·제59조~제59조의4, 조세특례제한법 제92조·제95조의2·제126조의2
+  // (law.go.kr 2026-11-02 기준 시행 법령. 2026 세제개편안은 2027년 귀속부터라 반영하지 않음)
+  const MAN = 10000;
+  function earnedIncomeDeduction(g) {
+    let d;
+    if (g <= 500 * MAN) d = g * 0.7;
+    else if (g <= 1500 * MAN) d = 350 * MAN + (g - 500 * MAN) * 0.4;
+    else if (g <= 4500 * MAN) d = 750 * MAN + (g - 1500 * MAN) * 0.15;
+    else if (g <= 10000 * MAN) d = 1200 * MAN + (g - 4500 * MAN) * 0.05;
+    else d = 1475 * MAN + (g - 10000 * MAN) * 0.02;
+    return Math.min(d, 2000 * MAN);
+  }
+  // 기본세율 [상한, 세율, 누적세액]
+  const TAX_BRACKETS = [[1400, 0.06, 0], [5000, 0.15, 84], [8800, 0.24, 624], [15000, 0.35, 1536],
+    [30000, 0.38, 3706], [50000, 0.40, 9406], [100000, 0.42, 17406], [Infinity, 0.45, 38406]];
+  function incomeTax(base) {
+    if (base <= 0) return 0;
+    let lower = 0;
+    for (const [upper, rate, acc] of TAX_BRACKETS) {
+      if (base <= upper * MAN) return acc * MAN + (base - lower * MAN) * rate;
+      lower = upper;
+    }
+  }
+  function earnedTaxCredit(tax, g) {
+    const raw = tax <= 130 * MAN ? tax * 0.55 : 71.5 * MAN + (tax - 130 * MAN) * 0.3;
+    let cap;
+    if (g <= 3300 * MAN) cap = 74 * MAN;
+    else if (g <= 7000 * MAN) cap = Math.max(66 * MAN, 74 * MAN - (g - 3300 * MAN) * 0.008);
+    else if (g <= 12000 * MAN) cap = Math.max(50 * MAN, 66 * MAN - (g - 7000 * MAN) / 2);
+    else cap = Math.max(20 * MAN, 50 * MAN - (g - 12000 * MAN) / 2);
+    return Math.min(raw, cap);
+  }
+  // 자녀세액공제: kids = 기본공제 대상 8세 이상 자녀 수, birth = 올해 출산·입양한 자녀가 몇째인지(0이면 없음)
+  function childTaxCredit(kids, birth) {
+    let c = kids <= 0 ? 0 : kids === 1 ? 25 * MAN : 55 * MAN + Math.max(0, kids - 2) * 40 * MAN;
+    if (birth) c += [0, 30, 50, 70][Math.min(3, birth)] * MAN;
+    return c;
+  }
+  // 신용카드 등 소득공제 (조특법 제126조의2 ②⑩⑪, 2026년 사용분). kids = 20세 이하 자녀등 수
+  // 총급여 7천만원 초과면 문화체육사용분은 결제수단에 따라 신용·체크에 들어가야 하므로 culture는 신용카드분으로 본다
+  function cardDeduction(o) {
+    const g = o.gross, low = g <= 7000 * MAN;
+    const market = o.market || 0, transit = o.transit || 0, debit = o.debit || 0;
+    const culture = low ? (o.culture || 0) : 0;
+    const credit = (o.credit || 0) + (low ? 0 : (o.culture || 0));
+    const min = g * 0.25;
+    const gross = market * 0.4 + transit * 0.4 + culture * 0.3 + debit * 0.3 + credit * 0.15;
+    let minus;
+    if (min <= credit) minus = min * 0.15;
+    else if (min <= credit + debit + culture) minus = credit * 0.15 + (min - credit) * 0.3;
+    else minus = credit * 0.15 + (debit + culture) * 0.3 + (min - credit - debit - culture) * 0.4;
+    const amount = Math.max(0, gross - minus);
+    const kids = o.kids || 0;
+    const limit = (low ? [300, 350, 400] : [250, 275, 300])[Math.min(2, kids)] * MAN;
+    const special = Math.min(market * 0.4 + transit * 0.4 + culture * 0.3, (low ? 300 : 200) * MAN);
+    const extra = amount > limit ? Math.min(amount - limit, special) : 0;
+    return { min, used: o.credit + debit + market + transit + (o.culture || 0), gross, amount, limit, extra,
+      deduction: Math.min(amount, limit) + extra };
+  }
+  // 의료비: 일반(700만원 한도) + 본인·65세 이상·6세 이하·장애인 등(한도 없음), 총급여 3% 초과분의 15%
+  function medicalCredit(g, general, special) {
+    const th = g * 0.03;
+    const base = general >= th ? Math.min(general - th, 700 * MAN) + special : Math.max(0, special - (th - general));
+    return base * 0.15;
+  }
+  function yearEndTax(o) {
+    const g = o.gross;
+    const n = (k) => Math.max(0, o[k] || 0);
+    const eid = earnedIncomeDeduction(g);
+    const income = Math.max(0, g - eid);
+    let personal = 150 * MAN * Math.max(1, n('people')) + 100 * MAN * n('elderly') + 200 * MAN * n('disabled');
+    if (o.singleParent) personal += 100 * MAN;
+    else if (o.woman && income <= 3000 * MAN) personal += 50 * MAN;
+    const pension = n('pension');
+    const card = cardDeduction({ gross: g, credit: n('credit'), debit: n('debit'), market: n('market'), transit: n('transit'),
+      culture: n('culture'), kids: n('kids20') });
+    // 공통 세액공제
+    const child = childTaxCredit(n('kids8'), n('birth'));
+    const pensionRate = g <= 5500 * MAN ? 0.15 : 0.12;
+    const savings = Math.min(n('pensionSavings'), 600 * MAN);
+    const pensionAcct = Math.min(savings + n('irp'), 900 * MAN) * pensionRate;
+    const marriage = o.marriage ? 50 * MAN : 0;
+    // 특별공제를 받는 경우(A)와 표준세액공제를 받는 경우(B) 중 세금이 적은 쪽
+    function scenario(itemized) {
+      const special = itemized ? n('insurance4') : 0;
+      const base = Math.max(0, income - personal - pension - special - card.deduction);
+      const tax = incomeTax(base);
+      const credits = { earned: earnedTaxCredit(tax, g), child, pension: pensionAcct, marriage, insurance: 0, medical: 0,
+        education: 0, donation: 0, rent: 0, standard: 0 };
+      if (itemized) {
+        credits.insurance = Math.min(n('insurance'), 100 * MAN) * 0.12;
+        credits.medical = medicalCredit(g, n('medicalGeneral'), n('medicalSpecial'));
+        credits.education = n('education') * 0.15;
+        const d = n('donation');
+        credits.donation = Math.min(d, 1000 * MAN) * 0.15 + Math.max(0, d - 1000 * MAN) * 0.3;
+        if (o.rentEligible && g <= 8000 * MAN) credits.rent = Math.min(n('rent'), 1000 * MAN) * (g <= 5500 * MAN ? 0.17 : 0.15);
+      } else credits.standard = 13 * MAN;
+      const totalCredit = Object.values(credits).reduce((a, b) => a + b, 0);
+      const decided = Math.floor(Math.max(0, tax - totalCredit));
+      return { itemized, base, tax, credits, totalCredit, decided };
+    }
+    const A = scenario(true), B = scenario(false);
+    const best = B.decided < A.decided ? B : A;
+    const local = Math.floor(best.decided * 0.1);
+    const r = { gross: g, eid, income, personal, pension, card, A, B, best, decided: best.decided, local };
+    if (o.prepaid != null && o.prepaid > 0) {
+      const prepaidLocal = o.prepaidLocal != null ? o.prepaidLocal : Math.floor(o.prepaid * 0.1);
+      r.refund = o.prepaid - best.decided;
+      r.refundLocal = prepaidLocal - local;
+      r.refundTotal = r.refund + r.refundLocal;
+    }
+    return r;
+  }
+
   // ---------- 금융 ----------
   // method: 'annuity'(원리금균등) | 'principal'(원금균등) | 'bullet'(만기일시)
   function loan(P, ratePct, n, method) {
@@ -235,6 +350,7 @@
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
     UNEMPLOYMENT: UI_RULES, unemployment, parentalLeave, brokerage, BASE_RATE, legalConversionRate, SERVICE, discharge,
+    earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, medicalCredit, yearEndTax,
     comma, won, korean,
   };
 

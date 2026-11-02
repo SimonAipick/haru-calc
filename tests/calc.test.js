@@ -84,6 +84,23 @@ eq('dc social', ymd(C.discharge(D('2026-03-01'), 21)), '2027-11-30');
 eq('dc 30th', ymd(C.discharge(D('2024-05-30'), 18)), '2025-11-29');
 eq('dc 31st', ymd(C.discharge(D('2024-05-31'), 18)), '2025-11-30');
 
+// 연말정산 2026 귀속 (손으로 계산한 값)
+eq('eid 5천', C.earnedIncomeDeduction(5e7), 12250000); eq('eid 4천', C.earnedIncomeDeduction(4e7), 11250000); eq('eid 2억', C.earnedIncomeDeduction(2e8), 16750000);
+eq('eid cap', C.earnedIncomeDeduction(4e8), 2e7);
+eq('tax 1400', C.incomeTax(1.4e7), 840000); eq('tax 1억', C.incomeTax(1e8), 19560000); eq('tax 12억', C.incomeTax(1.2e9), 474060000);
+eq('etc 1억 floor', C.earnedTaxCredit(19560000, 1e8), 500000); eq('etc 5천', C.earnedTaxCredit(3465000, 5e7), 660000);
+eq('etc small', C.earnedTaxCredit(1000000, 3e7), 550000);
+eq('child 3', C.childTaxCredit(3, 0), 950000); eq('child 1 + 둘째 출산', C.childTaxCredit(1, 2), 750000);
+var cd = C.cardDeduction({ gross: 4e7, credit: 1.5e7, debit: 6e6, market: 1e6, transit: 5e5, culture: 0, kids: 0 });
+eq('card amount', cd.amount, 3150000); eq('card extra', cd.extra, 150000); eq('card ded', cd.deduction, 3150000);
+eq('card min in debit', C.cardDeduction({ gross: 6e7, credit: 1e7, debit: 1e7 }).deduction, 1500000);
+eq('card min in market', C.cardDeduction({ gross: 4e7, credit: 0, debit: 2e6, market: 1e7 }).deduction, 800000);
+eq('card 8천 kids2', C.cardDeduction({ gross: 8e7, credit: 5e7, market: 3e6, kids: 2 }).deduction, 4200000);
+eq('medical', C.medicalCredit(5e7, 1e6, 3e6), 375000);
+var ye = C.yearEndTax({ gross: 5e7, people: 1, pension: 2250000, insurance4: 2e6, prepaid: 3e6 });
+eq('ye A', ye.A.decided, 2880000); eq('ye B', ye.B.decided, 3050000); eq('ye best', ye.decided, 2880000);
+eq('ye refund', ye.refund, 120000); var ys = C.yearEndTax({ gross: 3e7, people: 1, pension: 1350000 }); eq('ye std wins', ys.decided, 490000); eq('ye std flag', ys.best.itemized, false); eq('ye rent', C.yearEndTax({ gross: 3e7, people: 1, pension: 1350000, rentEligible: true, rent: 6e6 }).decided, 0); eq('ye refund total', ye.refundTotal, 132000);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

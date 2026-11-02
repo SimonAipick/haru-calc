@@ -1,0 +1,187 @@
+<!--
+{"slug": "year-end-tax", "title": "연말정산 환급 계산기", "category": "직장·급여", "order": 7,
+ "short": "2026년 귀속 환급·추가납부 예상",
+ "description": "총급여, 부양가족, 카드 사용액, 연금저축·IRP, 월세, 의료비·교육비를 넣으면 2026년 귀속(2027년 1~2월) 연말정산 결정세액과 환급액을 미리 계산합니다. 자녀세액공제 25·55만원, 자녀 수별 카드 공제 한도 등 2026년 개정 내용 반영.",
+ "lead": "2026년에 번 근로소득을 2027년 1~2월에 정산할 때 돌려받을 세금을 미리 계산합니다."}
+-->
+<!-- 근거 (2026-11-02 law.go.kr 시행 법령 원문 확인):
+     소득세법 제47조·제50조·제51조·제52조·제55조·제59조·제59조의2·제59조의3·제59조의4 https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=280405
+     조세특례제한법 제92조(결혼)·제95조의2(월세)·제126조의2(신용카드, 2025-12-23 개정 한도) https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=284389&efYd=20260918
+     2026 세제개편안(2027-01-01 이후 적용, 미반영) https://mofe.go.kr/nw/nes/detailNesDtaView.do?menuNo=4010100&searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>급여와 이미 낸 세금</legend>
+    <div class="grid2">
+      <label>총급여 <small>연봉에서 식대 등 비과세를 뺀 금액</small><input class="money" id="gross" inputmode="numeric" placeholder="예: 50,000,000"></label>
+      <label>올해 원천징수된 소득세 합계 <small>급여명세서 '소득세' × 12 (지방소득세 제외)</small><input class="money" id="prepaid" inputmode="numeric" placeholder="모르면 비워 두세요"></label>
+    </div>
+    <div class="grid2">
+      <label>국민연금 본인 부담액 (연간)<input class="money" id="pension" inputmode="numeric" placeholder="급여명세서 국민연금 × 12"></label>
+      <label>건강·장기요양·고용보험 본인 부담액 (연간)<input class="money" id="insurance4" inputmode="numeric" placeholder="세 항목 합계 × 12"></label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>가족 (인적공제·자녀세액공제)</legend>
+    <div class="grid2">
+      <label>기본공제 인원 <small>본인 포함, 소득금액 100만원 이하 부양가족</small><input type="number" id="people" inputmode="numeric" min="1" max="15" value="1"></label>
+      <label>그중 70세 이상 <small>경로우대 100만원</small><input type="number" id="elderly" inputmode="numeric" min="0" max="10" value="0"></label>
+    </div>
+    <div class="grid2">
+      <label>그중 장애인 <small>200만원 추가</small><input type="number" id="disabled" inputmode="numeric" min="0" max="10" value="0"></label>
+      <label>20세 이하 자녀 수 <small>카드 공제 한도용, 기본공제 받는 자녀</small><input type="number" id="kids20" inputmode="numeric" min="0" max="10" value="0"></label>
+    </div>
+    <div class="grid2">
+      <label>그중 8세 이상 자녀 수 <small>자녀세액공제 대상</small><input type="number" id="kids8" inputmode="numeric" min="0" max="10" value="0"></label>
+      <label>2026년에 출산·입양한 자녀<select id="birth"><option value="0">없음</option><option value="1">첫째</option><option value="2">둘째</option><option value="3">셋째 이상</option></select></label>
+    </div>
+    <label class="check"><input type="checkbox" id="singleParent"> 한부모 (배우자 없이 기본공제 대상 자녀가 있음)</label>
+    <label class="check"><input type="checkbox" id="woman"> 부녀자 공제 대상 (근로소득금액 3천만원 이하 여성으로 배우자가 있거나, 배우자 없이 부양가족이 있는 세대주)</label>
+    <label class="check"><input type="checkbox" id="marriage"> 2026년에 혼인신고를 했음 (결혼세액공제 50만원, 2026년이 마지막 해)</label>
+  </fieldset>
+  <fieldset>
+    <legend>카드·현금영수증 사용액 (2026년 1~12월)</legend>
+    <div class="grid2">
+      <label>신용카드<input class="money" id="credit" inputmode="numeric" placeholder="아래 항목에 넣은 금액은 빼고"></label>
+      <label>체크카드·현금영수증<input class="money" id="debit" inputmode="numeric"></label>
+    </div>
+    <div class="grid2">
+      <label>전통시장 <small>결제수단 관계없이</small><input class="money" id="market" inputmode="numeric"></label>
+      <label>대중교통<input class="money" id="transit" inputmode="numeric"></label>
+    </div>
+    <label>도서·신문·공연·박물관·영화·수영장·헬스장 <small>총급여 7천만원 이하만 30%</small><input class="money" id="culture" inputmode="numeric"></label>
+  </fieldset>
+  <fieldset>
+    <legend>세액공제 항목</legend>
+    <div class="grid2">
+      <label>연금저축 납입액<input class="money" id="pensionSavings" inputmode="numeric"></label>
+      <label>IRP·퇴직연금 본인 납입액<input class="money" id="irp" inputmode="numeric"></label>
+    </div>
+    <div class="grid2">
+      <label>보장성 보험료 <small>자동차·실손·종신 등</small><input class="money" id="insurance" inputmode="numeric"></label>
+      <label>교육비 <small>자녀별 한도 안의 금액</small><input class="money" id="education" inputmode="numeric"></label>
+    </div>
+    <div class="grid2">
+      <label>의료비: 본인·65세 이상·6세 이하·장애인<input class="money" id="medicalSpecial" inputmode="numeric"></label>
+      <label>의료비: 그 밖의 부양가족<input class="money" id="medicalGeneral" inputmode="numeric"></label>
+    </div>
+    <div class="grid2">
+      <label>기부금 <small>고향사랑기부금 제외</small><input class="money" id="donation" inputmode="numeric"></label>
+      <label>월세 (연간) <small>무주택, 총급여 8천만원 이하</small><input class="money" id="rent" inputmode="numeric"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="rentEligible"> 월세 세액공제 요건 충족 (무주택 세대주·세대원, 국민주택규모 또는 기준시가 4억원 이하 주택, 주민등록 주소지)</label>
+  </fieldset>
+  <button type="submit">연말정산 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const gross = UI.num('gross');
+  if (!gross) return null;
+  const ids = ['people', 'elderly', 'disabled', 'kids20', 'kids8', 'pension', 'insurance4', 'credit', 'debit', 'market', 'transit',
+    'culture', 'pensionSavings', 'irp', 'insurance', 'education', 'medicalSpecial', 'medicalGeneral', 'donation', 'rent'];
+  const o = { gross: gross, birth: Number(UI.val('birth')), prepaid: UI.$('prepaid').value === '' ? null : UI.num('prepaid') };
+  ids.forEach(function (k) { o[k] = UI.num(k); });
+  ['singleParent', 'woman', 'marriage', 'rentEligible'].forEach(function (k) { o[k] = UI.$(k).checked; });
+  if (o.kids8 > o.kids20) throw new Error('8세 이상 자녀 수가 20세 이하 자녀 수보다 많습니다. 20세 이하 자녀 수에는 8세 이상 자녀도 포함해 주세요.');
+  if (o.elderly + o.disabled > o.people * 2) throw new Error('70세 이상·장애인 인원을 확인해 주세요.');
+  const r = Calc.yearEndTax(o), b = r.best, c = b.credits;
+  const won = Calc.won;
+  let head;
+  if (r.refund == null) head = ['결정세액 (지방소득세 포함)', won(r.decided + r.local)];
+  else if (r.refundTotal >= 0) head = ['예상 환급액 (지방소득세 포함)', won(r.refundTotal)];
+  else head = ['예상 추가 납부액 (지방소득세 포함)', won(-r.refundTotal)];
+  const rows = [
+    ['근로소득공제', won(r.eid)],
+    ['근로소득금액', won(r.income)],
+    ['인적공제', won(r.personal)],
+    ['국민연금 공제', won(r.pension)],
+  ];
+  if (b.itemized) rows.push(['건강·고용보험 공제', won(UI.num('insurance4'))]);
+  rows.push(['카드 소득공제', won(r.card.deduction) + (r.card.used > 0 && r.card.used <= r.card.min ? ' (최저사용금액 ' + won(r.card.min) + ' 미달)' : '')]);
+  rows.push(['과세표준', won(b.base)], ['산출세액', won(b.tax)]);
+  const names = { earned: '근로소득세액공제', child: '자녀세액공제', pension: '연금계좌 세액공제', marriage: '결혼세액공제', insurance: '보험료 세액공제',
+    medical: '의료비 세액공제', education: '교육비 세액공제', donation: '기부금 세액공제', rent: '월세 세액공제', standard: '표준세액공제' };
+  Object.keys(names).forEach(function (k) { if (c[k] > 0) rows.push([names[k], won(c[k])]); });
+  rows.push(['결정세액 (소득세)', won(r.decided)], ['지방소득세 (10%)', won(r.local)]);
+  if (r.refund != null) rows.push(['이미 낸 소득세', won(o.prepaid)], ['소득세 환급(+)/납부(−)', won(r.refund)], ['지방소득세 환급(+)/납부(−)', won(r.refundLocal)]);
+  const notes = [];
+  notes.push(b.itemized
+    ? '특별공제(보험료·의료비·교육비 등)를 받는 쪽이 표준세액공제(13만원)보다 ' + won(r.B.decided - r.A.decided) + ' 유리해 그쪽으로 계산했습니다.'
+    : '공제 항목이 적어 표준세액공제(13만원)를 받는 쪽이 ' + won(r.A.decided - r.B.decided) + ' 유리합니다. 이 경우 건강·고용보험 공제와 특별세액공제, 월세 공제는 받지 않습니다.');
+  if (b.totalCredit > b.tax) notes.push('세액공제 합계(' + won(b.totalCredit) + ')가 산출세액보다 많아 결정세액이 0원입니다. 남는 공제는 돌려받지 못하니, 연금저축은 내년으로 미루는 등 조정할 여지가 있습니다.');
+  if (r.card.extra > 0) notes.push('카드 공제가 기본 한도 ' + won(r.card.limit) + '를 넘어, 전통시장·대중교통' + (gross <= 7e7 ? '·문화체육' : '') + ' 사용분으로 ' + won(r.card.extra) + '를 추가 공제했습니다.');
+  if (gross > 7e7 && o.culture > 0) notes.push('총급여 7천만원 초과자는 도서·공연 등 사용분에 30%가 적용되지 않아 신용카드 사용분(15%)으로 계산했습니다.');
+  if (o.rent > 0 && (!o.rentEligible || gross > 8e7)) notes.push('월세 세액공제 요건(체크 항목, 총급여 8천만원 이하)을 충족하지 않아 월세는 빼고 계산했습니다.');
+  if (r.refund == null) notes.push('이미 낸 소득세를 넣으면 환급액이 계산됩니다. 홈택스 [연말정산 미리보기]에서 1~9월 원천징수 내역을 확인할 수 있습니다.');
+  notes.push('근로소득만 있는 사람 기준 추정치입니다. 교육비·기부금 한도, 주택자금·청약 공제, 고향사랑기부금, 중소기업 취업자 감면은 반영하지 않습니다.');
+  return UI.result(head, rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>연말정산 계산 순서</h2>
+<p class="formula">총급여 − 근로소득공제 = 근로소득금액</p>
+<p class="formula">근로소득금액 − 인적공제 − 국민연금 − 건강·고용보험 − 카드 공제 등 = 과세표준</p>
+<p class="formula">과세표준 × 세율 = 산출세액 → 산출세액 − 세액공제 = 결정세액</p>
+<p class="formula">환급액 = (이미 낸 소득세 − 결정세액) × 1.1 (지방소득세 10% 포함)</p>
+<p>회사가 매달 떼는 세금은 간이세액표로 대충 걷은 금액입니다. 연말정산은 1년 치 공제를 모두 반영해 진짜 세금(결정세액)을 다시 계산하고, 더 낸 만큼 돌려주거나 덜 낸 만큼 더 걷는 절차입니다.</p>
+
+<h2>2026년 귀속에서 달라진 점</h2>
+<ul>
+  <li><strong>카드 공제 한도가 자녀 수에 따라 늘었습니다.</strong> 총급여 7천만원 이하는 기본 300만원에서 자녀 1명 350만원, 2명 이상 400만원으로, 7천만원 초과는 250만원에서 275만원, 300만원으로 올랐습니다 (2026년 사용분부터).</li>
+  <li><strong>수영장·헬스장 이용료</strong>도 문화체육사용분(30%)에 들어갑니다 (총급여 7천만원 이하, 강습비와 입회비는 제외).</li>
+  <li><strong>초등학교 저학년(9세 미만 또는 2학년 이하)</strong> 예체능 학원비가 교육비 세액공제 대상이 됐습니다 (2026년 지출분부터).</li>
+  <li><strong>월세 세액공제</strong>를 세대주의 배우자도 요건을 갖추면 받을 수 있습니다 (부부 합산 연 1,000만원 한도).</li>
+  <li><strong>결혼세액공제 50만원</strong>은 2026년 12월 31일까지 혼인신고한 경우가 마지막입니다.</li>
+  <li><strong>전년 대비 카드 사용 증가분 추가공제</strong>는 2024년 사용분에만 적용돼 2026년에는 없습니다.</li>
+</ul>
+
+<h2>근로소득공제와 세율</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>총급여</th><th>근로소득공제</th></tr></thead>
+  <tbody>
+    <tr><td>500만원 이하</td><td>70%</td></tr>
+    <tr><td>500만 ~ 1,500만원</td><td>350만원 + 500만원 초과분의 40%</td></tr>
+    <tr><td>1,500만 ~ 4,500만원</td><td>750만원 + 1,500만원 초과분의 15%</td></tr>
+    <tr><td>4,500만원 ~ 1억원</td><td>1,200만원 + 4,500만원 초과분의 5%</td></tr>
+    <tr><td>1억원 초과</td><td>1,475만원 + 1억원 초과분의 2% (최대 2,000만원)</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>과세표준</th><th>세율</th><th>누진공제</th></tr></thead>
+  <tbody>
+    <tr><td>1,400만원 이하</td><td>6%</td><td>-</td></tr>
+    <tr><td>1,400만 ~ 5,000만원</td><td>15%</td><td>126만원</td></tr>
+    <tr><td>5,000만 ~ 8,800만원</td><td>24%</td><td>576만원</td></tr>
+    <tr><td>8,800만 ~ 1억 5천만원</td><td>35%</td><td>1,544만원</td></tr>
+    <tr><td>1억 5천만 ~ 3억원</td><td>38%</td><td>1,994만원</td></tr>
+    <tr><td>3억 ~ 5억원</td><td>40%</td><td>2,594만원</td></tr>
+    <tr><td>5억 ~ 10억원</td><td>42%</td><td>3,594만원</td></tr>
+    <tr><td>10억원 초과</td><td>45%</td><td>6,594만원</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>주요 세액공제 (2026년 귀속)</h2>
+<ul>
+  <li><strong>근로소득세액공제:</strong> 산출세액 130만원 이하 55%, 초과분 30%. 한도는 총급여 3,300만원 이하 74만원, 7천만원 이하 66만원 이상, 1억 2천만원 이하 50만원 이상, 그 초과 20만원 이상.</li>
+  <li><strong>자녀세액공제:</strong> 8세 이상 기본공제 대상 자녀 1명 25만원, 2명 55만원, 3명부터 1명당 40만원 추가. 출산·입양한 해에는 첫째 30만원, 둘째 50만원, 셋째 이상 70만원.</li>
+  <li><strong>연금계좌:</strong> 연금저축 600만원, IRP 합산 900만원까지 총급여 5,500만원 이하 15%, 초과 12% (지방소득세 포함 16.5%, 13.2%).</li>
+  <li><strong>월세:</strong> 연 1,000만원까지 총급여 5,500만원 이하 17%, 8천만원 이하 15%.</li>
+  <li><strong>보험료 12%</strong>(100만원 한도), <strong>의료비 15%</strong>(총급여 3% 초과분, 부양가족 일반 의료비는 700만원 한도), <strong>교육비 15%</strong>, <strong>기부금 15%</strong>(1천만원 초과분 30%).</li>
+  <li><strong>표준세액공제 13만원:</strong> 건강·고용보험 공제, 특별세액공제, 월세 공제를 하나도 신청하지 않을 때 받습니다. 계산기는 두 방법 중 유리한 쪽을 고릅니다.</li>
+</ul>
+
+<h2>카드 공제는 이렇게 계산합니다</h2>
+<p>총급여의 25%(최저사용금액)를 넘게 쓴 금액부터 공제됩니다. 이 25%는 공제율이 낮은 신용카드 사용액부터 채우는 것으로 봅니다. 그래서 25%까지는 혜택 많은 신용카드를 쓰고, 넘는 부분은 체크카드나 현금영수증(30%)을 쓰는 것이 유리합니다.</p>
+<p>예를 들어 총급여 4천만원인 사람이 신용카드 1,500만원, 체크카드 600만원, 전통시장 100만원, 대중교통 50만원을 썼다면 최저사용금액은 1천만원입니다. 신용카드 초과분 500만원 × 15% + 체크카드 600만원 × 30% + 전통시장 100만원 × 40% + 대중교통 50만원 × 40% = 315만원입니다. 기본 한도 300만원을 넘는 15만원은 전통시장·대중교통 공제분으로 추가 인정돼 315만원을 모두 공제받습니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>이미 낸 소득세는 어디서 확인하나요?</h3>
+<p>매달 급여명세서의 '소득세'(지방소득세 제외)를 더하면 됩니다. 홈택스의 연말정산 미리보기에서도 1~9월 원천징수 내역을 볼 수 있습니다. 상여금이 있었던 달은 세금이 더 많이 떼였을 수 있으니 실제 금액을 더하세요.</p>
+<h3>맞벌이 부부는 누가 공제받아야 하나요?</h3>
+<p>부양가족 인적공제와 자녀세액공제는 한 사람만 받을 수 있습니다. 보통 세율이 높은(소득이 많은) 쪽이 받는 것이 유리하지만, 의료비는 총급여 3%를 넘어야 공제되므로 소득이 적은 쪽이 유리할 수 있습니다. 두 사람 조건을 각각 넣어 비교해 보세요.</p>
+<h3>결과가 실제와 다를 수 있나요?</h3>
+<p>네. 이 계산기는 근로소득만 있는 사람을 기준으로 주요 항목을 계산한 추정치입니다. 주택자금·청약저축 공제, 중소기업 취업자 소득세 감면, 고향사랑기부금, 교육비·기부금의 세부 한도는 반영하지 않습니다. 최종 금액은 회사 연말정산이나 홈택스 간소화 자료로 확인하세요.</p>
