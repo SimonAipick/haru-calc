@@ -148,3 +148,5 @@ summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 
 footer.site { border-top: 1px solid var(--line); padding: 24px 0 40px; color: var(--muted); font-size: 13px; }
 footer.site a { color: var(--muted); margin-right: 14px; }
+
+[hidden] { display: none !important; }
