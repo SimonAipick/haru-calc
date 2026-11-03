@@ -1,0 +1,109 @@
+<!--
+{"slug": "car-tax", "title": "자동차세 연납 할인 계산기", "category": "생활", "order": 7,
+ "short": "자동차세·연납 공제액",
+ "description": "배기량과 최초 등록일로 승용차 자동차세(지방교육세 포함)를 계산하고, 1월·3월·6월·9월에 연납했을 때 공제액과 실제 납부액을 보여줍니다. 지방세법 제127조·제128조, 시행령 제125조(연납 이자율 5%) 기준.",
+ "lead": "배기량·차령으로 1년 자동차세를 계산하고, 연납하면 얼마나 덜 내는지 보여줍니다."}
+-->
+<!-- 근거: 지방세법 제127조(세율·차령 경감), 제128조(납기·연납), 제151조(지방교육세 30%)
+     https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=282559 (시행 2026. 7. 1.)
+     지방세법 시행령 제122조(차령), 제125조(연납 이자율 100분의 5)
+     https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=290815 (시행 2026. 10. 1.) -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>차 종류 (비영업용 승용차)</legend>
+    <div class="seg">
+      <label><input type="radio" name="kind" value="cc" checked> 휘발유·경유·LPG·하이브리드</label>
+      <label><input type="radio" name="kind" value="other"> 전기차 등</label>
+    </div>
+  </fieldset>
+  <div class="grid2">
+    <label id="l-cc">배기량 (cc)<input id="cc" inputmode="numeric" placeholder="예: 1998"></label>
+    <label id="l-start">최초 등록일<input type="date" id="start"></label>
+    <label>과세 연도<select id="year"></select></label>
+    <label>연납 신청 시기<select id="month">
+      <option value="1">1월 (16~31일)</option><option value="3">3월 (16~31일)</option>
+      <option value="6">6월 (16~30일, 1기분 납기)</option><option value="9">9월 (16~30일)</option></select></label>
+  </div>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  const y = new Date().getFullYear(), m = new Date().getMonth() + 1, sel = UI.$('year');
+  [y, y + 1].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v + '년'; sel.appendChild(o); });
+  sel.value = m >= 10 ? y + 1 : y;
+})();
+UI.bind('f', 'out', function () {
+  const kind = UI.val('kind'), other = kind === 'other';
+  UI.$('l-cc').hidden = other; UI.$('l-start').hidden = other;
+  const cc = UI.num('cc'), start = UI.date('start'), year = +UI.val('year'), month = +UI.val('month');
+  if (!other && (!cc || !start)) return null;
+  if (!other && start.getFullYear() > year) throw new Error('최초 등록일이 과세 연도보다 뒤입니다.');
+  const r = Calc.carTax({ kind, cc, start, year, month });
+  const p = r.prepay;
+  const rows = [];
+  if (!other) {
+    rows.push(['기본 세액', Calc.comma(cc) + 'cc × ' + r.rate + '원 = ' + Calc.won(r.A)]);
+    rows.push(['차령', r.n1 === r.n2 ? r.n1 + '년' : '1기 ' + r.n1 + '년 · 2기 ' + r.n2 + '년']);
+  }
+  rows.push(['1기분 (6월) 자동차세', Calc.won(r.h1)], ['2기분 (12월) 자동차세', Calc.won(r.h2)],
+    ['지방교육세 (30%)', Calc.won(r.edu)], ['1년 합계 (나눠 낼 때)', Calc.won(r.total)]);
+  const label = month === 9 ? '9월 연납 시 2기분 납부액' : month + '월 연납 시 납부액';
+  rows.push(['연납 공제액 (자동차세분)', Calc.won(p.deduction) + ' (실효 ' + (p.effRate * 100).toFixed(2) + '%)'],
+    ['아끼는 돈 (지방교육세 포함)', Calc.won(p.saving)]);
+  const notes = ['실제 고지서는 10원 미만을 버리는 등 단수 처리로 몇십 원 차이가 날 수 있습니다.',
+    '지자체 조례로 세율을 최대 50%까지 올릴 수 있으나 대부분 표준세율을 씁니다. 정확한 금액은 위택스·서울시 이택스에서 확인하세요.'];
+  if (month === 9) notes.unshift('9월 연납은 6월에 1기분을 이미 낸 경우를 가정해 2기분만 계산했습니다.');
+  if (r.annual <= 100000) notes.unshift('연세액이 10만원 이하라 6월에 1년치가 한꺼번에 고지될 수 있습니다(이때도 2기분의 5%를 공제).');
+  if (!other && start.getMonth() >= 6) notes.unshift('하반기(7~12월)에 등록한 차는 1기분과 2기분의 차령이 1년씩 다릅니다.');
+  return UI.result([label, Calc.won(p.pay)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>자동차세는 어떻게 계산하나요?</h2>
+<p>개인이 타는 승용차(비영업용)의 자동차세는 <strong>배기량에 cc당 세액을 곱한 금액</strong>이 1년 세금입니다. 여기에 자동차세의 30%가 <strong>지방교육세</strong>로 붙습니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>배기량</th><th>cc당 세액</th><th>예시 (1년 자동차세)</th></tr></thead>
+  <tbody>
+    <tr><td>1,000cc 이하</td><td>80원</td><td>998cc → 79,840원</td></tr>
+    <tr><td>1,600cc 이하</td><td>140원</td><td>1,598cc → 223,720원</td></tr>
+    <tr><td>1,600cc 초과</td><td>200원</td><td>1,998cc → 399,600원</td></tr>
+    <tr><td>전기·태양열·알코올 차</td><td colspan="2">배기량과 상관없이 연 100,000원</td></tr>
+  </tbody>
+</table>
+</div>
+<p>1,600cc를 1cc라도 넘으면 전체 배기량에 200원이 적용됩니다. 지방세법 제127조 기준이며, 영업용·승합·화물차는 세율이 다릅니다.</p>
+
+<h2>오래된 차는 깎아 줍니다 (차령 경감)</h2>
+<p class="formula">기분세액 = A/2 − (A/2 × 5%) × (차령 − 2)</p>
+<p>A는 위 표로 구한 1년 세액입니다. <strong>차령 3년차부터 해마다 5%씩</strong> 줄고, 12년차 이후에는 최대 50%까지 줄어듭니다. 전기차 등 정액 차는 차령 경감이 없습니다.</p>
+<ul>
+  <li>1~6월에 등록한 차: 차령 = 과세 연도 − 등록 연도 + 1</li>
+  <li>7~12월에 등록한 차: 1기분은 과세 연도 − 등록 연도, 2기분은 거기에 1을 더합니다.</li>
+</ul>
+<p>예를 들어 2025년 3월에 등록한 1,998cc 차는 2027년에 차령 3년이라 5%가 줄어 1년 자동차세가 379,620원, 지방교육세를 더하면 493,506원입니다.</p>
+
+<h2>연납하면 얼마나 아끼나요?</h2>
+<p>자동차세는 원래 6월과 12월에 반씩 냅니다. 1년치를 미리 한꺼번에 내면(연납) <strong>남은 기간만큼 5%의 이자율</strong>로 공제해 줍니다(지방세법 시행령 제125조).</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>신청 기간</th><th>공제 계산</th><th>실효 할인율 (평년)</th></tr></thead>
+  <tbody>
+    <tr><td>1월 16일 ~ 31일</td><td>연세액 × 334일/365 × 5%</td><td>약 4.58%</td></tr>
+    <tr><td>3월 16일 ~ 31일</td><td>연세액 × 275일/365 × 5%</td><td>약 3.77%</td></tr>
+    <tr><td>6월 16일 ~ 30일</td><td>2기분 × 5%</td><td>약 2.5%</td></tr>
+    <tr><td>9월 16일 ~ 30일</td><td>2기분 × 92일/184 × 5%</td><td>2기분의 2.5%</td></tr>
+  </tbody>
+</table>
+</div>
+<p>공제된 만큼 지방교육세(30%)도 같이 줄어서, 실제로 아끼는 돈은 공제액의 1.3배입니다. 윤년에는 1월 연납 일수가 335일/366으로 바뀝니다. 1월에 내는 것이 가장 유리합니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>연납은 어디서 신청하나요?</h3>
+<p>위택스(서울은 이택스), 관할 시·군·구청 세무과, ARS로 신청할 수 있습니다. 한 번 연납하면 다음 해 1월에 연납 고지서를 보내 주는 지자체가 많지만, 고지서가 오지 않으면 직접 신청해야 합니다.</p>
+<h3>연납한 뒤 차를 팔면요?</h3>
+<p>소유권을 넘긴 날 이후 기간의 세금은 일할 계산해서 돌려받습니다. 양도인이 동의하면 연납한 세금을 양수인이 낸 것으로 볼 수도 있습니다(지방세법 제130조).</p>
+<h3>경차는 자동차세가 따로 할인되나요?</h3>
+<p>자동차세 자체는 배기량 기준(1,000cc 이하 cc당 80원)으로만 계산됩니다. 경차 혜택으로 알려진 것은 주로 취득세 감면 등 다른 세금 이야기입니다.</p>
+<h3>장애인·국가유공자 차량은요?</h3>
+<p>요건을 갖추면 자동차세가 면제될 수 있습니다(지방세특례제한법). 이 계산기는 면제·감면을 반영하지 않으니 관할 구청에 확인하세요.</p>

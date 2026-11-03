@@ -325,6 +325,44 @@
     return { value: v, label, normalMin: 18.5 * m2, normalMax: 22.9 * m2 };
   }
 
+  // ---------- 자동차세 (비영업용 승용) ----------
+  // 근거: 지방세법 제127조·제128조·제151조, 시행령 제122조·제125조 (2026-11 기준)
+  const CAR_TAX = { prepayRate: 0.05, eduRate: 0.3, otherCarTax: 100000 };
+  function carCcRate(cc) { return cc <= 1000 ? 80 : cc <= 1600 ? 140 : 200; }
+  // 차령: 기산일이 상반기면 과세연도-기산연도+1, 하반기면 1기분은 +0, 2기분은 +1
+  function carAge(start, year, half) {
+    const n = year - start.getFullYear() + (start.getMonth() < 6 || half === 2 ? 1 : 0);
+    return Math.min(12, n);
+  }
+  // 기분세액 = A/2 - (A/2 × 5%)(n-2), 차령 3년 이상부터 적용
+  function carHalfTax(A, n) { return A / 2 - A / 2 * 0.05 * Math.max(0, n - 2); }
+  function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+
+  // o: { kind: 'cc'|'other', cc, start(Date, 차령기산일), year, month(1|3|6|9) }
+  function carTax(o) {
+    const other = o.kind === 'other';
+    const A = other ? CAR_TAX.otherCarTax : o.cc * carCcRate(o.cc);
+    const n1 = other ? 0 : Math.max(0, carAge(o.start, o.year, 1));
+    const n2 = other ? 0 : Math.max(0, carAge(o.start, o.year, 2));
+    const h1 = other ? A / 2 : carHalfTax(A, n1), h2 = other ? A / 2 : carHalfTax(A, n2);
+    const annual = h1 + h2;
+    const days = isLeap(o.year) ? 366 : 365;
+    const r = CAR_TAX.prepayRate;
+    // 납부기한 다음 날~12월 31일 일수: 1월 납부는 2/1부터, 3월 납부는 4/1부터
+    const rest = (m) => days - daysBetween(new Date(o.year, 0, 1), new Date(o.year, m, 1));
+    let base, deduction;
+    if (o.month === 1 || o.month === 3) { base = annual; deduction = annual * rest(o.month) / days * r; }
+    else if (o.month === 6) { base = annual; deduction = h2 * r; }
+    else if (o.month === 9) { base = h2; deduction = h2 * rest(9) / 184 * r; }
+    const edu = (x) => x * CAR_TAX.eduRate;
+    const res = { A, rate: other ? 0 : carCcRate(o.cc), n1, n2, h1, h2, annual, edu: edu(annual), total: annual + edu(annual) };
+    if (base != null) {
+      res.prepay = { base, deduction, tax: base - deduction, edu: edu(base - deduction), pay: (base - deduction) * (1 + CAR_TAX.eduRate),
+        saving: deduction * (1 + CAR_TAX.eduRate), effRate: deduction / base };
+    }
+    return res;
+  }
+
   // ---------- 표시 ----------
   function comma(n, digits) {
     if (!isFinite(n)) return '-';
@@ -351,6 +389,7 @@
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
     UNEMPLOYMENT: UI_RULES, unemployment, parentalLeave, brokerage, BASE_RATE, legalConversionRate, SERVICE, discharge,
     earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, medicalCredit, yearEndTax,
+    CAR_TAX, carCcRate, carAge, carTax,
     comma, won, korean,
   };
 

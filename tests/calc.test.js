@@ -101,6 +101,21 @@ var ye = C.yearEndTax({ gross: 5e7, people: 1, pension: 2250000, insurance4: 2e6
 eq('ye A', ye.A.decided, 2880000); eq('ye B', ye.B.decided, 3050000); eq('ye best', ye.decided, 2880000);
 eq('ye refund', ye.refund, 120000); var ys = C.yearEndTax({ gross: 3e7, people: 1, pension: 1350000 }); eq('ye std wins', ys.decided, 490000); eq('ye std flag', ys.best.itemized, false); eq('ye rent', C.yearEndTax({ gross: 3e7, people: 1, pension: 1350000, rentEligible: true, rent: 6e6 }).decided, 0); eq('ye refund total', ye.refundTotal, 132000);
 
+// 자동차세 (손으로 계산한 값)
+var ct = C.carTax({ kind: 'cc', cc: 1998, start: D('2025-03-10'), year: 2027, month: 1 });
+eq('car age 3', ct.n1, 3); eq('car half', ct.h1, 189810); eq('car annual', ct.annual, 379620); eq('car total', ct.total, 493506);
+eq('car jan ded', ct.prepay.deduction, 17368.92, 0.01); eq('car jan pay', ct.prepay.pay, 470926.41, 0.01);
+var co = C.carTax({ kind: 'cc', cc: 999, start: D('2010-05-01'), year: 2027 });
+eq('car old cap12', co.n2, 12); eq('car old annual', co.annual, 39960); eq('car old total', co.total, 51948); eq('car no prepay', co.prepay, undefined);
+eq('car 1600', C.carTax({ kind: 'cc', cc: 1600, start: D('2027-01-05'), year: 2027 }).annual, 224000);
+eq('car 1601', C.carTax({ kind: 'cc', cc: 1601, start: D('2027-01-05'), year: 2027 }).annual, 320200);
+var ch = C.carTax({ kind: 'cc', cc: 2000, start: D('2026-09-01'), year: 2028, month: 9 });
+eq('car 2H n1', ch.n1, 2); eq('car 2H n2', ch.n2, 3); eq('car 2H annual', ch.annual, 390000); eq('car sep ded', ch.prepay.deduction, 4750);
+eq('car jun ded', C.carTax({ kind: 'cc', cc: 2000, start: D('2026-09-01'), year: 2028, month: 6 }).prepay.deduction, 9500);
+eq('car leap jan', C.carTax({ kind: 'cc', cc: 2000, start: D('2026-09-01'), year: 2028, month: 1 }).prepay.deduction, 17848.36, 0.01);
+var ce = C.carTax({ kind: 'other', year: 2027, month: 3 });
+eq('car ev total', ce.total, 130000); eq('car ev mar ded', ce.prepay.deduction, 3767.12, 0.01);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }
