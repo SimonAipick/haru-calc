@@ -363,6 +363,44 @@
     return res;
   }
 
+  // ---------- 주택청약 가점 (민영주택 가점제) ----------
+  // 근거: 주택공급에 관한 규칙 별표 1 가점제 적용기준 (2024. 12. 18. 개정, 시행 2026. 6. 15. 판 기준)
+  // 무주택기간: 만 30세가 되는 날(30세 전 혼인하면 혼인신고일)과 무주택이 된 날 중 늦은 날부터
+  function homelessStart(o) {
+    let base = addMonths(o.birth, 360);
+    if (o.married && o.marriage && o.marriage < base) base = o.marriage;
+    return o.homelessSince && o.homelessSince > base ? o.homelessSince : base;
+  }
+  // 1년 미만 2점, 1년마다 2점씩, 15년 이상 32점
+  function homelessPoints(months) { return months < 0 ? 0 : Math.min(32, 2 + 2 * Math.floor(months / 12)); }
+  // 0명 5점, 1명마다 5점씩, 6명 이상 35점
+  function dependentPoints(n) { return Math.min(35, 5 + 5 * Math.max(0, Math.floor(n))); }
+  // 6개월 미만 1점, 6개월~1년 2점, 이후 1년마다 1점, 15년 이상 17점
+  function accountPoints(months) {
+    if (months < 0) return 0;
+    return months < 6 ? 1 : months < 12 ? 2 : Math.min(17, 2 + Math.floor(months / 12));
+  }
+  // 배우자 통장: 가입기간의 50%를 같은 표로 환산, 최대 3점 (비고 2)
+  function spouseAccountPoints(months) { return months < 0 ? 0 : Math.min(3, accountPoints(months / 2)); }
+
+  // o: { ref(공고일), birth, married, marriage, owns(현재 세대 주택 소유), homelessSince(처분 후 무주택이 된 날, 없으면 null),
+  //      dependents, account(가입일), spouseAccount(배우자 가입일, 없으면 null) }
+  function housingScore(o) {
+    let start = null, hMonths = -1;
+    if (!o.owns) {
+      start = homelessStart(o);
+      if (start <= o.ref) hMonths = fullMonths(start, o.ref);
+    }
+    const homeless = o.owns ? 0 : homelessPoints(hMonths);
+    const dependents = dependentPoints(o.dependents);
+    const aMonths = o.account ? fullMonths(o.account, o.ref) : -1;
+    const own = accountPoints(aMonths);
+    const sMonths = o.married && o.spouseAccount ? fullMonths(o.spouseAccount, o.ref) : -1;
+    const spouse = spouseAccountPoints(sMonths);
+    const account = Math.min(17, own + spouse);
+    return { start, hMonths, homeless, dependents, aMonths, own, sMonths, spouse, account, total: homeless + dependents + account };
+  }
+
   // ---------- 표시 ----------
   function comma(n, digits) {
     if (!isFinite(n)) return '-';
@@ -390,6 +428,7 @@
     UNEMPLOYMENT: UI_RULES, unemployment, parentalLeave, brokerage, BASE_RATE, legalConversionRate, SERVICE, discharge,
     earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, medicalCredit, yearEndTax,
     CAR_TAX, carCcRate, carAge, carTax,
+    homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
     comma, won, korean,
   };
 

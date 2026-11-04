@@ -116,6 +116,25 @@ eq('car leap jan', C.carTax({ kind: 'cc', cc: 2000, start: D('2026-09-01'), year
 var ce = C.carTax({ kind: 'other', year: 2027, month: 3 });
 eq('car ev total', ce.total, 130000); eq('car ev mar ded', ce.prepay.deduction, 3767.12, 0.01);
 
+// 주택청약 가점 (주택공급에 관한 규칙 별표 1, 손으로 계산한 값)
+var R = D('2026-11-04');
+var h1 = C.housingScore({ ref: R, birth: D('1990-03-15'), married: false, owns: false, dependents: 0, account: D('2015-01-10') });
+eq('hs single hMonths', h1.hMonths, 79); eq('hs single homeless', h1.homeless, 14); eq('hs single dep', h1.dependents, 5);
+eq('hs single acct', h1.account, 13); eq('hs single total', h1.total, 32);
+var h2 = C.housingScore({ ref: R, birth: D('1995-06-01'), married: true, marriage: D('2022-05-20'), owns: false, dependents: 2, account: D('2020-01-01'), spouseAccount: D('2023-01-01') });
+eq('hs marriage start', ymd(h2.start), '2022-5-20'); eq('hs marriage homeless', h2.homeless, 10); eq('hs own acct', h2.own, 8);
+eq('hs spouse 3', h2.spouse, 3); eq('hs marriage total', h2.total, 36);
+eq('hs spouse 10m', C.spouseAccountPoints(10), 1); eq('hs spouse 18m', C.spouseAccountPoints(18), 2); eq('hs spouse 24m', C.spouseAccountPoints(24), 3);
+var h3 = C.housingScore({ ref: R, birth: D('1980-01-01'), married: true, marriage: D('2008-10-10'), owns: false, homelessSince: D('2018-03-01'), dependents: 3, account: D('2005-01-01'), spouseAccount: D('2005-01-01') });
+eq('hs disposal homeless', h3.homeless, 18); eq('hs acct cap 17', h3.account, 17); eq('hs disposal total', h3.total, 55);
+var h4 = C.housingScore({ ref: R, birth: D('2000-05-05'), married: false, owns: false, dependents: 0, account: D('2026-07-01') });
+eq('hs under30 homeless', h4.homeless, 0); eq('hs 4m acct', h4.account, 1); eq('hs under30 total', h4.total, 6);
+eq('hs max', C.housingScore({ ref: R, birth: D('1970-01-01'), married: false, owns: false, dependents: 6, account: D('2000-01-01') }).total, 84);
+eq('hs owns', C.housingScore({ ref: R, birth: D('1970-01-01'), married: false, owns: true, dependents: 1, account: D('2000-01-01') }).homeless, 0);
+eq('hs 1y boundary', C.homelessPoints(C.fullMonths(D('2025-11-04'), R)), 4); eq('hs 11m', C.homelessPoints(11), 2);
+eq('hs acct 6m boundary', C.accountPoints(C.fullMonths(D('2026-05-04'), R)), 2); eq('hs acct 15y', C.accountPoints(180), 17); eq('hs acct 14y11m', C.accountPoints(179), 16);
+eq('hs dep 7', C.dependentPoints(7), 35);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }
