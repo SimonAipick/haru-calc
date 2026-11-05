@@ -151,6 +151,8 @@ eq('pc isa cap 300', C.pensionCredit({ incomeType: 'wage', income: 4000 * MAN, i
 eq('pc isa prev', C.pensionCredit({ incomeType: 'wage', income: 4000 * MAN, isa: 5000 * MAN, isaPrev: 200 * MAN }).isaExtra, 100 * MAN);
 var p5 = C.pensionCredit({ incomeType: 'wage', income: 3000 * MAN, savings: 600 * MAN, taxCap: 500000 });
 eq('pc tax cap', p5.credit, 500000); eq('pc tax cap flag', p5.capped, true); eq('pc tax cap local', p5.local, 50000);
+eq('pc tax cap room 0', p5.roomRefund, 0);
+eq('pc partial cap room', C.pensionCredit({ incomeType: 'wage', income: 4000 * MAN, savings: 400 * MAN, taxCap: 1000000 }).roomRefund, 440000);
 
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);

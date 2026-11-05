@@ -421,8 +421,11 @@
     const local = credit * P.local;
     const savingsRoom = Math.max(0, P.savingsCap - v('savings'));
     const totalRoom = P.totalCap - base;
+    // 남은 한도를 다 채웠을 때 늘어나는 환급 (결정세액을 넣었으면 그 안에서만)
+    let fullCredit = (eligible + totalRoom) * rate;
+    if (o.taxCap != null && o.taxCap >= 0) fullCredit = Math.min(fullCredit, o.taxCap);
     return { rate, sav, base, isaLimit, isaExtra, eligible, excess, credit, local, refund: credit + local, capped,
-      savingsRoom: Math.min(savingsRoom, totalRoom), totalRoom, roomRefund: totalRoom * rate * (1 + P.local),
+      savingsRoom: Math.min(savingsRoom, totalRoom), totalRoom, roomRefund: Math.max(0, fullCredit - credit) * (1 + P.local),
       maxRefund: (P.totalCap + isaExtra) * rate * (1 + P.local) };
   }
 

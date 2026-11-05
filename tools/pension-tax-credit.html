@@ -26,7 +26,7 @@
 <script>
 UI.bind('f', 'out', function () {
   const type = UI.val('type');
-  UI.$('l-income').firstChild.textContent = type === 'wage' ? '올해 총급여 (연봉, 비과세 제외)' : '올해 종합소득금액 (필요경비·소득공제 전 소득금액)';
+  UI.$('l-income').firstChild.textContent = type === 'wage' ? '올해 총급여 (연봉, 비과세 제외)' : '올해 종합소득금액 (필요경비를 뺀 소득, 소득공제 전)';
   const income = UI.num('income');
   if (!income) return null;
   const capRaw = UI.$('cap').value.trim();
@@ -37,8 +37,8 @@ UI.bind('f', 'out', function () {
   if (r.isaExtra) rows.push(['ISA 전환 추가 한도 반영', Calc.won(r.isaExtra)]);
   rows.push(['연금계좌 세액공제 (소득세)', Calc.won(r.credit)], ['지방소득세 감소분 (10%)', Calc.won(r.local)]);
   if (r.totalRoom > 0) {
-    rows.push(['900만원까지 남은 한도', Calc.won(r.totalRoom) + (r.savingsRoom < r.totalRoom ? ' (연금저축은 ' + Calc.won(r.savingsRoom) + '까지, 나머지는 IRP로)' : '')],
-      ['남은 한도를 채우면 더 받는 돈', Calc.won(r.roomRefund)]);
+    rows.push(['900만원까지 남은 한도', Calc.won(r.totalRoom) + (r.savingsRoom < r.totalRoom ? ' (연금저축은 ' + Calc.won(r.savingsRoom) + '까지, 나머지는 IRP로)' : '')]);
+    if (!r.capped) rows.push(['남은 한도를 채우면 더 받는 돈', Calc.won(r.roomRefund)]);
   }
   const notes = [];
   if (r.capped) notes.push('세액공제가 결정세액보다 커서 결정세액만큼만 공제됩니다. 이 경우 더 넣어도 환급이 늘지 않습니다.');
