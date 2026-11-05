@@ -135,6 +135,23 @@ eq('hs 1y boundary', C.homelessPoints(C.fullMonths(D('2025-11-04'), R)), 4); eq(
 eq('hs acct 6m boundary', C.accountPoints(C.fullMonths(D('2026-05-04'), R)), 2); eq('hs acct 15y', C.accountPoints(180), 17); eq('hs acct 14y11m', C.accountPoints(179), 16);
 eq('hs dep 7', C.dependentPoints(7), 35);
 
+// 연금저축·IRP 세액공제 (소득세법 제59조의3, 손으로 계산한 값)
+var MAN = 10000;
+var p1 = C.pensionCredit({ incomeType: 'wage', income: 5000 * MAN, savings: 600 * MAN, irp: 300 * MAN });
+eq('pc 15% credit', p1.credit, 1350000); eq('pc 15% refund', p1.refund, 1485000); eq('pc full room', p1.totalRoom, 0);
+var p2 = C.pensionCredit({ incomeType: 'wage', income: 5500 * MAN + 1, savings: 800 * MAN, irp: 200 * MAN });
+eq('pc 12% sav cap', p2.base, 800 * MAN); eq('pc 12% credit', p2.credit, 960000); eq('pc excess', p2.excess, 200 * MAN);
+eq('pc 5500 boundary', C.pensionCredit({ incomeType: 'wage', income: 5500 * MAN, irp: 100 * MAN }).rate, 0.15);
+var p3 = C.pensionCredit({ incomeType: 'total', income: 5000 * MAN, savings: 300 * MAN, irp: 100 * MAN });
+eq('pc total 12%', p3.rate, 0.12); eq('pc room', p3.totalRoom, 500 * MAN); eq('pc sav room', p3.savingsRoom, 300 * MAN);
+eq('pc room refund', p3.roomRefund, 660000);
+var p4 = C.pensionCredit({ incomeType: 'wage', income: 4000 * MAN, savings: 600 * MAN, irp: 300 * MAN, isa: 2500 * MAN });
+eq('pc isa extra', p4.isaExtra, 250 * MAN); eq('pc isa credit', p4.credit, 1725000);
+eq('pc isa cap 300', C.pensionCredit({ incomeType: 'wage', income: 4000 * MAN, isa: 5000 * MAN }).isaExtra, 300 * MAN);
+eq('pc isa prev', C.pensionCredit({ incomeType: 'wage', income: 4000 * MAN, isa: 5000 * MAN, isaPrev: 200 * MAN }).isaExtra, 100 * MAN);
+var p5 = C.pensionCredit({ incomeType: 'wage', income: 3000 * MAN, savings: 600 * MAN, taxCap: 500000 });
+eq('pc tax cap', p5.credit, 500000); eq('pc tax cap flag', p5.capped, true); eq('pc tax cap local', p5.local, 50000);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

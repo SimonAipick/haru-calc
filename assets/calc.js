@@ -401,6 +401,31 @@
     return { start, hMonths, homeless, dependents, aMonths, own, sMonths, spouse, account, total: homeless + dependents + account };
   }
 
+  // ---------- 연금저축·IRP 세액공제 ----------
+  // 근거: 소득세법 제59조의3(시행 2026. 1. 1.), 시행령 제118조의3(초과 납입액 전환)
+  const PENSION = { savingsCap: 600 * MAN, totalCap: 900 * MAN, isaRate: 0.1, isaCap: 300 * MAN, local: 0.1 };
+  // o: { incomeType: 'wage'(근로소득만, 총급여) | 'total'(종합소득금액), income, savings(연금저축), irp,
+  //      isa(ISA 만기 전환금액), isaPrev(직전 연도에 적용된 ISA 추가 한도), taxCap(연금 공제 전 결정세액, 선택) }
+  function pensionCredit(o) {
+    const P = PENSION, v = (k) => Math.max(0, o[k] || 0);
+    const low = o.incomeType === 'total' ? v('income') <= 4500 * MAN : v('income') <= 5500 * MAN;
+    const rate = low ? 0.15 : 0.12;
+    const sav = Math.min(v('savings'), P.savingsCap);
+    const base = Math.min(sav + v('irp'), P.totalCap);
+    const isaLimit = Math.max(0, P.isaCap - v('isaPrev'));
+    const isaExtra = Math.min(v('isa') * P.isaRate, isaLimit, v('isa'));
+    const eligible = base + isaExtra;
+    const excess = v('savings') + v('irp') - base;
+    let credit = eligible * rate, capped = false;
+    if (o.taxCap != null && o.taxCap >= 0 && credit > o.taxCap) { credit = o.taxCap; capped = true; }
+    const local = credit * P.local;
+    const savingsRoom = Math.max(0, P.savingsCap - v('savings'));
+    const totalRoom = P.totalCap - base;
+    return { rate, sav, base, isaLimit, isaExtra, eligible, excess, credit, local, refund: credit + local, capped,
+      savingsRoom: Math.min(savingsRoom, totalRoom), totalRoom, roomRefund: totalRoom * rate * (1 + P.local),
+      maxRefund: (P.totalCap + isaExtra) * rate * (1 + P.local) };
+  }
+
   // ---------- 표시 ----------
   function comma(n, digits) {
     if (!isFinite(n)) return '-';
@@ -429,6 +454,7 @@
     earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, medicalCredit, yearEndTax,
     CAR_TAX, carCcRate, carAge, carTax,
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
+    PENSION, pensionCredit,
     comma, won, korean,
   };
 
