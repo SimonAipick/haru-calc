@@ -1,0 +1,95 @@
+<!--
+{"slug": "prepayment-fee", "title": "중도상환수수료 계산기", "category": "금융", "order": 9,
+ "short": "대출 미리 갚을 때 수수료",
+ "description": "대출 실행일, 갚는 날, 갚을 금액, 수수료율로 중도상환수수료를 계산하고, 수수료가 사라지는 날(실행일부터 3년)까지 기다리면 붙는 이자와 비교합니다. 금융소비자보호법 제20조(3년 이내 상환 시에만 부과)와 2025년 1월 13일 수수료율 개편 기준.",
+ "lead": "대출을 미리 갚을 때 내는 수수료와, 면제일까지 기다리는 게 나은지 계산합니다."}
+-->
+<!-- 근거: 금융소비자 보호에 관한 법률 제20조 제1항 제4호 나목 https://www.law.go.kr/법령/금융소비자보호에관한법률/제20조 (시행 2026. 1. 2.)
+     금융위원회 보도자료 "1월 13일(월) 신규 대출부터 중도상환수수료율이 인하됩니다." (2025-01-09) https://www.fsc.go.kr/edu/news/83839
+     한국주택금융공사 보금자리론 상품소개(3년 이내 남은 일수에 따라 부과) https://www.hf.go.kr/ko/sub01/sub01_01_01.do -->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>대출 실행일<input type="date" id="start"></label>
+    <label>갚을 날 (중도상환일)<input type="date" id="repay"></label>
+    <label>미리 갚을 금액<input id="amount" class="money" inputmode="numeric" placeholder="예: 100000000"></label>
+    <label>중도상환수수료율 (%)<input id="rate" inputmode="decimal" placeholder="예: 0.6"></label>
+    <label>대출 만기일 (3년보다 짧은 대출만, 선택)<input type="date" id="end"></label>
+    <label>수수료 없이 갚을 수 있는 금액 (선택)<input id="free" class="money" inputmode="numeric" placeholder="예: 0"></label>
+    <label>대출 금리 (%, 선택: 기다릴 때 이자 비교)<input id="loanRate" inputmode="decimal" placeholder="예: 4.2"></label>
+  </div>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.today('repay');
+UI.bind('f', 'out', function () {
+  const start = UI.date('start'), repay = UI.date('repay'), amount = UI.num('amount'), ratePct = UI.num('rate');
+  if (!start || !repay || !amount || !UI.$('rate').value.trim()) return null;
+  if (repay < start) throw new Error('갚을 날이 대출 실행일보다 앞입니다.');
+  if (ratePct < 0 || ratePct > 5) throw new Error('수수료율은 % 단위로 넣어 주세요 (예: 0.6).');
+  const end = UI.date('end');
+  if (end && end <= start) throw new Error('만기일이 대출 실행일보다 앞입니다.');
+  const loanRatePct = UI.num('loanRate') || 0;
+  const r = Calc.prepaymentFee({ amount, ratePct, start, repay, end, free: UI.num('free') || 0, loanRatePct });
+  if (r.exempt) {
+    return UI.result(['중도상환수수료', '0원'], [['수수료 부과 기간 끝난 날', Calc.fmtDate(r.windowEnd)]],
+      ['대출 실행일부터 3년(또는 만기)이 지나서 갚으면 법상 중도상환수수료를 물릴 수 없습니다(금융소비자보호법 제20조).']);
+  }
+  const rows = [
+    ['수수료 대상 금액', Calc.won(r.base)],
+    ['남은 일수 / 부과 기간', Calc.comma(r.remaining) + '일 / ' + Calc.comma(r.windowDays) + '일'],
+    ['계산식', Calc.won(r.base) + ' × ' + ratePct + '% × ' + r.remaining + '/' + r.windowDays],
+    ['수수료가 없어지는 날', Calc.fmtDate(r.windowEnd) + ' (' + Calc.comma(r.remaining) + '일 뒤)'],
+  ];
+  const notes = ['원 미만은 버렸습니다. 금융회사마다 일수 계산(3년을 1,095일로 고정 등)이 조금 달라 몇백 원 차이가 날 수 있습니다.',
+    '수수료율은 대출약정서·상품설명서나 은행 앱의 대출 상세 화면에서 확인하세요. 2025년 1월 13일 전에 맺은 대출은 예전 수수료율(1%대)이 그대로 적용됩니다.'];
+  if (r.waitInterest != null) {
+    rows.push(['면제일까지 기다리면 붙는 이자', Calc.won(r.waitInterest)]);
+    notes.unshift(r.waitInterest > r.fee
+      ? '수수료를 내더라도 지금 갚는 쪽이 ' + Calc.won(r.waitInterest - r.fee) + ' 이득입니다(금리 그대로, 이자만 비교).'
+      : '면제일까지 기다리는 쪽이 ' + Calc.won(r.fee - r.waitInterest) + ' 이득입니다(금리 그대로, 이자만 비교).');
+  }
+  return UI.result(['예상 중도상환수수료', Calc.won(r.fee)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>중도상환수수료는 어떻게 계산하나요?</h2>
+<p>대부분의 대출약정서는 아래 식으로 수수료를 정합니다. 시간이 지날수록 남은 일수가 줄어서 수수료도 매일 조금씩 줄어듭니다.</p>
+<p class="formula">중도상환수수료 = 미리 갚는 금액 × 수수료율 × 남은 일수 ÷ 부과 기간</p>
+<ul>
+  <li><strong>부과 기간:</strong> 대출 실행일부터 3년입니다. 만기가 3년보다 짧은 대출은 대출 기간 전체입니다.</li>
+  <li><strong>남은 일수:</strong> 갚는 날부터 부과 기간이 끝나는 날까지의 일수입니다.</li>
+  <li><strong>수수료율:</strong> 금융회사와 상품마다 다릅니다. 약정서에 적힌 값을 넣으세요.</li>
+</ul>
+<p>예를 들어 2025년 3월 1일에 받은 주택담보대출 1억원을 2026년 11월 6일에 갚고 수수료율이 0.6%라면, 부과 기간 1,096일 중 481일이 남아 수수료는 <strong>263,321원</strong>입니다.</p>
+
+<h2>3년이 지나면 수수료가 없습니다</h2>
+<p>금융소비자보호법 제20조는 중도상환수수료를 원칙적으로 금지하고, <strong>대출계약이 성립한 날부터 3년 이내에 갚는 경우</strong> 등 예외에만 받을 수 있게 합니다. 3년이 지나면 이름을 바꿔 위약금으로 받는 것도 안 됩니다.</p>
+
+<h2>2025년 1월 13일부터 수수료율이 내렸습니다</h2>
+<p>금융위원회는 2025년 1월 13일 신규 계약부터 중도상환수수료를 <strong>실제 드는 비용(자금 운용 차질에 따른 기회비용, 인지세·감정평가 등 행정·모집 비용) 안에서만</strong> 받도록 바꿨습니다. 그때 공시된 업권 평균 수수료율은 아래와 같습니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>업권</th><th>주담대 고정</th><th>주담대 변동</th><th>신용 고정</th><th>신용 변동</th></tr></thead>
+  <tbody>
+    <tr><td>은행</td><td>1.43% → 0.56%</td><td>1.25% → 0.55%</td><td>0.95% → 0.12%</td><td>0.83% → 0.11%</td></tr>
+    <tr><td>저축은행</td><td>1.64% → 1.24%</td><td>1.78% → 1.20%</td><td>1.69% → 1.45%</td><td>1.64% → 1.33%</td></tr>
+    <tr><td>신협</td><td>1.61% → 0.45%</td><td>1.75% → 0.55%</td><td>1.43% → 0.04%</td><td>1.37% → 0.04%</td></tr>
+    <tr><td>생명보험</td><td>1.61% → 1.28%</td><td>1.46% → 1.16%</td><td>1.00% → 0%</td><td>-</td></tr>
+    <tr><td>손해보험</td><td>1.60% → 1.10%</td><td>1.5% → 1.00%</td><td>1.00% → 0%</td><td>-</td></tr>
+  </tbody>
+</table>
+</div>
+<p>출처: 금융위원회 보도자료(2025-01-09). 평균값이라 개별 상품과 다를 수 있고, 금융회사는 매년 비용을 다시 계산해 각 금융협회 홈페이지에 수수료율을 공시합니다. 2025년 1월 13일 전에 맺은 대출은 예전 수수료율이 적용됩니다.</p>
+
+<h2>지금 갚을까, 면제일까지 기다릴까?</h2>
+<p>수수료는 갚는 금액에 수수료율과 남은 기간 비율을 곱한 금액이고, 기다리는 동안에는 대출 이자가 계속 붙습니다. 대출 금리를 넣으면 두 금액을 비교해 줍니다. 수수료율이 0.6%이고 금리가 4%라면, 대부분 수수료를 내고 바로 갚는 쪽이 이자를 더 아낍니다. 다만 비상금까지 털어 갚는 것은 피하는 게 좋습니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>일부만 갚아도 수수료가 붙나요?</h3>
+<p>네, 갚는 금액만큼 붙습니다. 다만 상품에 따라 해마다 일정 금액(예: 대출 원금의 10%)까지는 수수료 없이 갚게 해 주기도 합니다. 그런 조건이 있으면 '수수료 없이 갚을 수 있는 금액' 칸에 넣으세요.</p>
+<h3>다른 은행으로 갈아타면(대환) 수수료를 내나요?</h3>
+<p>기존 대출을 갚는 것이라 3년 안이면 기존 은행에 중도상환수수료를 냅니다. 새 대출의 금리 인하로 아끼는 이자가 수수료와 새 대출 부대비용보다 큰지 따져 보세요.</p>
+<h3>보금자리론 같은 정책 대출은요?</h3>
+<p>한국주택금융공사 보금자리론은 최초 실행일부터 3년 안에 갚으면 남은 일수에 따라 0.5% 한도 안에서 조기상환수수료를 받습니다. 다자녀가구·사회적배려층 우대 대상 등은 면제됩니다(공사 상품소개 기준). 정확한 요율은 공사 홈페이지와 약정서로 확인하세요.</p>
+<h3>카드론도 수수료가 있나요?</h3>
+<p>금융위원회 자료에 따르면 여신전문금융회사(카드사 등)는 카드대출 등에 중도상환수수료를 면제하고 있습니다.</p>

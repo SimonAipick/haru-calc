@@ -154,6 +154,18 @@ eq('pc tax cap', p5.credit, 500000); eq('pc tax cap flag', p5.capped, true); eq(
 eq('pc tax cap room 0', p5.roomRefund, 0);
 eq('pc partial cap room', C.pensionCredit({ incomeType: 'wage', income: 4000 * MAN, savings: 400 * MAN, taxCap: 1000000 }).roomRefund, 440000);
 
+// 중도상환수수료 (금소법 제20조 3년 규칙, 손으로 계산한 값)
+var pf = C.prepaymentFee({ amount: 1e8, ratePct: 0.6, start: D('2025-03-01'), repay: D('2026-11-06') });
+eq('pf window days', pf.windowDays, 1096); eq('pf remaining', pf.remaining, 481); eq('pf fee', pf.fee, 263321, 0);
+eq('pf window end', ymd(pf.windowEnd), '2028-3-1');
+eq('pf after 3y', C.prepaymentFee({ amount: 1e8, ratePct: 0.6, start: D('2023-01-10'), repay: D('2026-01-10') }).fee, 0);
+eq('pf after 3y flag', C.prepaymentFee({ amount: 1e8, ratePct: 0.6, start: D('2023-01-10'), repay: D('2026-02-01') }).exempt, true);
+var ps = C.prepaymentFee({ amount: 2e7, ratePct: 0.11, start: D('2024-06-01'), end: D('2026-06-01'), repay: D('2025-06-01') });
+eq('pf short term days', ps.windowDays, 730); eq('pf short term fee', ps.fee, 11000, 0);
+eq('pf free amount', C.prepaymentFee({ amount: 5e7, free: 1e7, ratePct: 0.5, start: D('2026-01-01'), repay: D('2026-01-01') }).fee, 200000, 0);
+eq('pf free covers all', C.prepaymentFee({ amount: 5e6, free: 1e7, ratePct: 0.5, start: D('2026-01-01'), repay: D('2026-05-01') }).fee, 0);
+eq('pf wait interest', C.prepaymentFee({ amount: 1e8, ratePct: 0.6, loanRatePct: 4, start: D('2025-03-01'), repay: D('2026-11-06') }).waitInterest, 5271232.88, 0.01);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

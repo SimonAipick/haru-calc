@@ -429,6 +429,22 @@
       maxRefund: (P.totalCap + isaExtra) * rate * (1 + P.local) };
   }
 
+  // ---------- 중도상환수수료 ----------
+  // 근거: 금융소비자보호법 제20조 제1항 제4호 나목(시행 2026. 1. 2.): 대출계약 성립일부터 3년 이내 상환할 때만 부과 가능.
+  // 산식(여신거래약정서 일반형): 중도상환금액 × 수수료율 × 잔여일수 / 부과기간(대출기간, 3년 넘으면 3년)
+  // o: { amount, ratePct, start(대출 실행일), repay(상환일), end(만기일, 선택), free(면제 금액, 선택), years(부과기간, 기본 3),
+  //      loanRatePct(대출 금리, 선택: 면제일까지 기다릴 때 붙는 이자 비교용) }
+  function prepaymentFee(o) {
+    let windowEnd = addMonths(o.start, 12 * (o.years || 3));
+    if (o.end && o.end < windowEnd) windowEnd = o.end;
+    const windowDays = daysBetween(o.start, windowEnd);
+    const remaining = Math.max(0, daysBetween(o.repay, windowEnd));
+    const base = Math.max(0, o.amount - Math.max(0, o.free || 0));
+    const fee = remaining > 0 && windowDays > 0 ? Math.floor(base * o.ratePct / 100 * remaining / windowDays) : 0;
+    const waitInterest = o.loanRatePct ? o.amount * o.loanRatePct / 100 * remaining / 365 : null;
+    return { windowEnd, windowDays, remaining, base, fee, exempt: remaining === 0, waitInterest };
+  }
+
   // ---------- 표시 ----------
   function comma(n, digits) {
     if (!isFinite(n)) return '-';
@@ -457,7 +473,7 @@
     earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, medicalCredit, yearEndTax,
     CAR_TAX, carCcRate, carAge, carTax,
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
-    PENSION, pensionCredit,
+    PENSION, pensionCredit, prepaymentFee,
     comma, won, korean,
   };
 
