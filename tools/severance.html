@@ -26,7 +26,7 @@ UI.bind('f', 'out', function () {
   const r = Calc.severance({ start: start, end: end, wage3m: wage, bonusYear: UI.num('bonus'), leavePay: UI.num('leave') });
   const notes = [];
   if (!r.eligible) notes.push('재직기간이 1년 미만이라 법정 퇴직금 지급 대상이 아닙니다. 아래 금액은 참고용입니다.');
-  notes.push('퇴직소득세가 원천징수되므로 실제 입금액은 이보다 조금 적습니다.');
+  notes.push('퇴직소득세가 원천징수되므로 실제 입금액은 이보다 조금 적습니다. 세금은 퇴직소득세 계산기에서 따로 계산할 수 있습니다.');
   return UI.result(['예상 퇴직금 (세전)', Calc.won(r.amount)], [
     ['재직일수', Calc.comma(r.days) + '일 (약 ' + (r.days / 365).toFixed(1) + '년)'],
     ['3개월 임금 총액', Calc.won(r.total3m)],
@@ -62,4 +62,4 @@ UI.bind('f', 'out', function () {
 <h3>퇴직연금(DB·DC)에 가입한 경우도 같은가요?</h3>
 <p>확정급여형(DB)은 이 계산기 결과와 거의 같습니다. 확정기여형(DC)은 회사가 매년 연봉의 1/12 이상을 적립하고 운용 수익이 더해지므로 실제 금액이 다를 수 있습니다.</p>
 <h3>퇴직금에도 세금이 붙나요?</h3>
-<p>네. 퇴직소득세와 지방소득세가 원천징수됩니다. 근속연수가 길수록 공제가 커져 세율은 일반 근로소득보다 낮은 편입니다. IRP 계좌로 받으면 연금으로 수령할 때까지 과세가 미뤄집니다.</p>
+<p>네. 퇴직소득세와 지방소득세가 원천징수됩니다. 근속연수가 길수록 공제가 커져 세율은 일반 근로소득보다 낮은 편입니다. IRP 계좌로 받으면 연금으로 수령할 때까지 과세가 미뤄집니다. 정확한 세액은 <a href="../retirement-tax/">퇴직소득세 계산기</a>에서 확인하세요.</p>

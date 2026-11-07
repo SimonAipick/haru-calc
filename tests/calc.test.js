@@ -166,6 +166,23 @@ eq('pf free amount', C.prepaymentFee({ amount: 5e7, free: 1e7, ratePct: 0.5, sta
 eq('pf free covers all', C.prepaymentFee({ amount: 5e6, free: 1e7, ratePct: 0.5, start: D('2026-01-01'), repay: D('2026-05-01') }).fee, 0);
 eq('pf wait interest', C.prepaymentFee({ amount: 1e8, ratePct: 0.6, loanRatePct: 4, start: D('2025-03-01'), repay: D('2026-11-06') }).waitInterest, 5271232.88, 0.01);
 
+// 퇴직소득세 (소득세법 제48조·제55조②, 손으로 계산한 값)
+var rt = C.retirementTax({ pay: 1e8, years: 20 });
+eq('rt 20y svc', rt.svcDed, 4000 * MAN); eq('rt 20y conv', rt.converted, 3600 * MAN); eq('rt 20y convded', rt.convDed, 2480 * MAN);
+eq('rt 20y base', rt.base, 1120 * MAN); eq('rt 20y tax', rt.tax, 1120000, 0); eq('rt 20y local', rt.local, 112000, 0);
+eq('rt 20y pension', rt.pension10, 784000, 0);
+var r5 = C.retirementTax({ pay: 1e8, years: 5 });
+eq('rt 5y conv', r5.converted, 22800 * MAN); eq('rt 5y convded', r5.convDed, 11930 * MAN); eq('rt 5y tax', r5.tax, 9418750, 0);
+eq('rt 10y 3000', C.retirementTax({ pay: 3000 * MAN, years: 10 }).tax, 200000, 0);
+eq('rt 2y 1000', C.retirementTax({ pay: 1000 * MAN, years: 2 }).tax, 190000, 0);
+eq('rt conv under 800', C.retirementTax({ pay: 500 * MAN, years: 3 }).tax, 0);
+eq('rt pay under svc', C.retirementTax({ pay: 200 * MAN, years: 3 }).svcDed, 200 * MAN);
+eq('rt 25y svc', C.serviceDeduction(25), 5500 * MAN); eq('rt conv 3.5e', C.convertedPayDeduction(35000 * MAN), 16920 * MAN);
+eq('rt years exact', C.serviceYears(D('2016-03-02'), D('2026-03-01')), 10);
+eq('rt years +1day', C.serviceYears(D('2016-03-02'), D('2026-03-02')), 11);
+eq('rt years short', C.serviceYears(D('2025-01-01'), D('2025-06-30')), 1);
+eq('rt dates', C.retirementTax({ pay: 1e8, start: D('2006-01-02'), last: D('2025-12-31') }).tax, 1120000, 0);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

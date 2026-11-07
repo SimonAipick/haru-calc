@@ -445,6 +445,45 @@
     return { windowEnd, windowDays, remaining, base, fee, exempt: remaining === 0, waitInterest };
   }
 
+  // ---------- 퇴직소득세 ----------
+  // 근거: 소득세법 제48조(퇴직소득공제)·제55조제2항(퇴직소득 산출세액)·제129조제1항제5호의3, 시행령 제105조(근속연수)
+  // (law.go.kr 2026-11-07 확인: 법률 제21221호 시행 2026. 1. 1., 시행령 시행 2026. 10. 1.)
+  // 근속연수: 입사일부터 퇴직한 날(마지막 근무일)까지, 1년 미만 끝수는 1년
+  function serviceYears(start, last) {
+    const next = addDays(last, 1);
+    let y = fullYears(start, next);
+    if (addMonths(start, 12 * y) < next) y++;
+    return Math.max(1, y);
+  }
+  function serviceDeduction(n) {
+    if (n <= 5) return 100 * MAN * n;
+    if (n <= 10) return 500 * MAN + 200 * MAN * (n - 5);
+    if (n <= 20) return 1500 * MAN + 250 * MAN * (n - 10);
+    return 4000 * MAN + 300 * MAN * (n - 20);
+  }
+  function convertedPayDeduction(c) {
+    if (c <= 800 * MAN) return c;
+    if (c <= 7000 * MAN) return 800 * MAN + (c - 800 * MAN) * 0.6;
+    if (c <= 10000 * MAN) return 4520 * MAN + (c - 7000 * MAN) * 0.55;
+    if (c <= 30000 * MAN) return 6170 * MAN + (c - 10000 * MAN) * 0.45;
+    return 15170 * MAN + (c - 30000 * MAN) * 0.35;
+  }
+  // o: { pay(퇴직소득금액 = 과세대상 퇴직급여), years(근속연수) 또는 start·last(마지막 근무일) }
+  function retirementTax(o) {
+    const years = o.years || serviceYears(o.start, o.last);
+    const pay = Math.max(0, o.pay);
+    const svcDed = Math.min(pay, serviceDeduction(years));
+    const converted = (pay - svcDed) * 12 / years;
+    const convDed = convertedPayDeduction(converted);
+    const base = Math.max(0, converted - convDed);
+    const convTax = incomeTax(base);
+    const tax = Math.floor(convTax / 12 * years);
+    const local = Math.floor(tax * 0.1);
+    return { years, pay, svcDed, converted, convDed, base, convTax, tax, local, total: tax + local,
+      net: pay - tax - local, effRate: pay ? (tax + local) / pay : 0,
+      pension10: Math.floor(tax * 0.7), pension20: Math.floor(tax * 0.6), pensionOver20: Math.floor(tax * 0.5) };
+  }
+
   // ---------- 표시 ----------
   function comma(n, digits) {
     if (!isFinite(n)) return '-';
@@ -474,6 +513,7 @@
     CAR_TAX, carCcRate, carAge, carTax,
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
     PENSION, pensionCredit, prepaymentFee,
+    serviceYears, serviceDeduction, convertedPayDeduction, retirementTax,
     comma, won, korean,
   };
 
