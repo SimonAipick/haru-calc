@@ -1,0 +1,103 @@
+<!--
+{"slug": "social-insurance", "title": "4대보험 계산기", "category": "직장·급여", "order": 9,
+ "short": "월급에서 빠지는 4대보험료",
+ "description": "월급을 넣으면 국민연금(9.5%)·건강보험(7.19%)·장기요양(0.9448%)·고용보험료를 근로자 부담분과 사업주 부담분으로 나눠 계산합니다. 2026년 요율과 국민연금 기준소득월액 상·하한(2026년 7월부터 41만~659만원) 반영.",
+ "lead": "월급에서 빠지는 4대보험료와 회사가 함께 내는 금액을 2026년 요율로 계산합니다."}
+-->
+<!-- 근거 (2026-11-08 원문 확인):
+     국민연금공단 연금보험료 안내(보험료율 9.5%, 기준소득월액 천원 미만 절사, 상·하한) https://www.nps.or.kr/pnsinfo/ntpsklg/getOHAF0038M0.do
+     국민연금법 제88조 https://www.law.go.kr/법령/국민연금법/제88조
+     국민건강보험법 시행령 제44조(1만분의 719)·제32조(상·하한) https://www.law.go.kr/법령/국민건강보험법시행령/제44조
+     노인장기요양보험법 제9조, 시행령 제4조(100만분의 9,448) https://www.law.go.kr/법령/노인장기요양보험법시행령/제4조
+     국민건강보험공단 2026년 달라지는 제도 https://www.nhis.or.kr/renewal_popup/poster/20260204_poster_longdesc_1.html
+     고용보험료징수법 시행령 제12조 https://www.law.go.kr/법령/고용보험및산업재해보상보험의보험료징수등에관한법률시행령/제12조
+     2026년 평균 산재보험료율 1.47% 유지(고용노동부 2025-12-31 발표, 헤럴드경제 보도) https://www.heraldk.com/article/2025123016313362622 -->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>세전 월급 (상여 포함 월평균)<input id="pay" class="money" inputmode="numeric" placeholder="예: 3000000"></label>
+    <label>비과세 금액 (식대 등, 선택)<input id="nontax" class="money" inputmode="numeric" placeholder="예: 200000"></label>
+    <label>계산 기준 시기<select id="when">
+      <option value="2026-07-01">2026년 7월 ~ 2027년 6월</option>
+      <option value="2026-01-01">2026년 1월 ~ 6월</option></select></label>
+    <label>회사 규모 (고용보험 사업주 추가분)<select id="size">
+      <option value="small">상시근로자 150명 미만</option>
+      <option value="priority">150명 이상, 우선지원대상기업</option>
+      <option value="mid">150명 이상 1천명 미만</option>
+      <option value="large">1천명 이상, 국가·지자체</option></select></label>
+    <label>산재보험 요율 (%, 선택: 사업주 부담)<input id="accident" inputmode="decimal" placeholder="예: 0.8"></label>
+  </div>
+  <label class="check"><input type="checkbox" id="noPension"> 만 60세 이상 (국민연금 사업장가입자가 아님)</label>
+  <label class="check"><input type="checkbox" id="lateHire"> 만 65세 이후에 새로 고용됨 (실업급여 보험료 제외)</label>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const gross = UI.num('pay');
+  if (!gross) return null;
+  const nontax = UI.num('nontax') || 0;
+  if (nontax > gross) throw new Error('비과세 금액이 월급보다 큽니다.');
+  const acc = UI.num('accident') || 0;
+  if (acc < 0 || acc > 20) throw new Error('산재보험 요율은 % 단위로 넣어 주세요 (예: 0.8).');
+  const r = Calc.socialInsurance({ pay: gross - nontax, at: Calc.parseDate(UI.$('when').value), size: UI.$('size').value,
+    accidentPct: acc, noPension: UI.$('noPension').checked, lateHire: UI.$('lateHire').checked });
+  const both = (a, b) => Calc.won(a) + ' / ' + Calc.won(b);
+  const rows = [
+    ['보험료 기준 보수 (월급 − 비과세)', Calc.won(r.pay)],
+    ['국민연금 4.75% (근로자 / 회사)', both(r.pension, r.pension)],
+    ['건강보험 3.595% (근로자 / 회사)', both(r.health, r.health)],
+    ['장기요양 (근로자 / 회사)', both(r.ltc, r.ltc)],
+    ['고용보험 (근로자 / 회사)', both(r.empEmployee, r.empEmployer)],
+  ];
+  if (acc) rows.push(['산재보험 (회사만)', Calc.won(r.accident)]);
+  rows.push(['회사 부담 합계', Calc.won(r.employer)], ['보험료 빼고 남는 월급 (세금 전)', Calc.won(gross - r.employee)],
+    ['1년 근로자 부담 (×12)', Calc.won(r.employee * 12)]);
+  const notes = ['소득세·지방소득세는 빼지 않은 금액입니다. 원 미만은 버렸고, 실제 고지액과 몇십 원 차이가 날 수 있습니다.'];
+  if (!UI.$('noPension').checked && r.pensionBase !== Math.floor(r.pay / 1000) * 1000)
+    notes.unshift('국민연금은 기준소득월액 ' + Calc.won(r.pensionBase) + ' (상·하한 ' + Calc.won(r.pensionLimit.min) + ' ~ ' + Calc.won(r.pensionLimit.max) + ')으로 계산했습니다.');
+  if (r.healthTotal === Calc.SOCIAL.healthMin || r.healthTotal === Calc.SOCIAL.healthMax)
+    notes.unshift('건강보험료가 월 하한·상한(전체 ' + Calc.won(Calc.SOCIAL.healthMin) + ' ~ ' + Calc.won(Calc.SOCIAL.healthMax) + ')에 걸렸습니다.');
+  return UI.result(['월급에서 빠지는 4대보험료', Calc.won(r.employee)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>2026년 4대보험 요율</h2>
+<p>직장인은 보험료 대부분을 회사와 반씩 나눠 냅니다. 고용보험 일부와 산재보험은 회사만 냅니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>보험</th><th>전체 요율</th><th>근로자</th><th>회사</th></tr></thead>
+  <tbody>
+    <tr><td>국민연금</td><td>9.5%</td><td>4.75%</td><td>4.75%</td></tr>
+    <tr><td>건강보험</td><td>7.19%</td><td>3.595%</td><td>3.595%</td></tr>
+    <tr><td>장기요양보험</td><td>0.9448% (건강보험료의 약 13.14%)</td><td>반</td><td>반</td></tr>
+    <tr><td>고용보험 (실업급여)</td><td>1.8%</td><td>0.9%</td><td>0.9%</td></tr>
+    <tr><td>고용보험 (고용안정·직업능력개발)</td><td>0.25~0.85%</td><td>없음</td><td>전액</td></tr>
+    <tr><td>산재보험</td><td>업종별 (2026년 평균 1.47%)</td><td>없음</td><td>전액</td></tr>
+  </tbody>
+</table>
+</div>
+<p>출처: 국민연금공단 연금보험료 안내, 국민건강보험법 시행령 제44조, 노인장기요양보험법 시행령 제4조, 고용보험료징수법 시행령 제12조. 요율은 매년 바뀔 수 있습니다.</p>
+
+<h2>어떻게 계산하나요?</h2>
+<p class="formula">보험료 = (월급 − 비과세 소득) × 요율</p>
+<ul>
+  <li><strong>국민연금:</strong> 월 소득에서 천원 미만을 버린 '기준소득월액'에 9.5%를 곱합니다. 기준소득월액은 2026년 7월부터 2027년 6월까지 41만~659만원 안에서 정해집니다. 월급이 659만원을 넘어도 연금보험료는 659만원 기준으로 냅니다.</li>
+  <li><strong>건강보험:</strong> 보수월액에 7.19%를 곱합니다. 2026년 직장가입자 월 보험료(회사분 포함)는 20,160원 ~ 9,183,480원 사이로 정해집니다.</li>
+  <li><strong>장기요양보험:</strong> 노인장기요양보험법 제9조에 따라 건강보험료에 '건강보험료율 대비 장기요양보험료율'(0.9448% ÷ 7.19%)을 곱합니다.</li>
+  <li><strong>고용보험:</strong> 실업급여 몫 1.8%를 반씩 내고, 회사는 규모에 따라 고용안정·직업능력개발 몫(150명 미만 0.25%, 우선지원대상기업 0.45%, 1천명 미만 0.65%, 1천명 이상 0.85%)을 더 냅니다.</li>
+</ul>
+<p>예를 들어 2026년 7월 이후 월급 300만원(비과세 없음)이면 국민연금 142,500원, 건강보험 107,850원, 장기요양 14,172원, 고용보험 27,000원으로 <strong>월 291,522원</strong>이 빠집니다. 150명 미만 회사는 같은 금액에 고용보험 7,500원을 더해 299,022원을 냅니다(산재보험 제외).</p>
+
+<h2>비과세 소득은 빼고 계산합니다</h2>
+<p>식대(월 20만원까지), 자가운전보조금 같은 비과세 소득은 4대보험료 기준 보수에서 빠집니다. 급여명세서에서 비과세 항목 합계를 확인해 넣으세요. 넣지 않으면 보험료가 실제보다 조금 많게 나옵니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>왜 7월에 국민연금이 바뀌나요?</h3>
+<p>국민연금 기준소득월액은 전년도 소득으로 정해 그해 7월부터 다음 해 6월까지 씁니다. 상·하한액도 매년 7월에 바뀝니다. 그래서 연봉이 올라도 국민연금은 다음 해 7월에야 오르는 경우가 많습니다.</p>
+<h3>건강보험료는 4월에 정산된다던데요?</h3>
+<p>건강보험은 그해 보험료를 일단 전년도 보수로 내고, 다음 해 4월에 실제 받은 보수로 다시 계산해 차액을 걷거나 돌려줍니다(연말정산). 연봉이 많이 오른 해에는 4월 급여에서 추가로 빠질 수 있습니다.</p>
+<h3>60세가 넘으면 국민연금을 안 내나요?</h3>
+<p>국민연금 사업장가입자는 18세 이상 60세 미만이라, 만 60세가 되면 의무 가입이 끝납니다. 원하면 임의계속가입을 신청해 계속 낼 수 있습니다. 건강보험·고용보험은 나이와 관계없이 냅니다.</p>
+<h3>65세 넘어 입사했는데 고용보험은요?</h3>
+<p>만 65세 이후 새로 고용된 사람은 실업급여 적용이 제외되어 근로자 고용보험료를 내지 않습니다. 회사는 고용안정·직업능력개발 몫만 냅니다.</p>
+<h3>산재보험 요율은 어디서 보나요?</h3>
+<p>업종마다 다르고 매년 고용노동부 고시로 정해집니다. 근로복지공단 고용·산재보험 토탈서비스에서 우리 회사 요율을 확인할 수 있습니다. 2026년 평균 요율은 1.47%입니다.</p>

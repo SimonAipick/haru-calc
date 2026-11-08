@@ -484,6 +484,43 @@
       pension10: Math.floor(tax * 0.7), pension20: Math.floor(tax * 0.6), pensionOver20: Math.floor(tax * 0.5) };
   }
 
+  // ---------- 4대보험 (직장가입자 월 보험료) ----------
+  // 근거 (2026-11-08 원문 확인):
+  //  국민연금: 2026년 보험료율 9.5%(본인·사용자 각 4.75%, 2033년 13%까지 매년 0.5%p 인상), 기준소득월액은 신고 소득에서 천원 미만 절사,
+  //            상·하한 2025.7~2026.6 40만~637만원, 2026.7~2027.6 41만~659만원 (국민연금공단 연금보험료 안내, 국민연금법 제88조·부칙)
+  //  건강보험: 국민건강보험법 시행령 제44조 1만분의 719, 월 보수월액보험료 상한 9,183,480원·하한 20,160원(2026년 보건복지부 고시)
+  //  장기요양: 노인장기요양보험법 제9조(건강보험료 × 장기요양보험료율 ÷ 건강보험료율), 시행령 제4조 100만분의 9,448
+  //  고용보험: 보험료징수법 시행령 제12조 실업급여 1천분의 18(노사 반반), 고용안정·직업능력개발 1만분의 25/45/65/85(사업주만)
+  //  산재보험: 사업주만 부담, 업종별 요율(2026년 평균 1.47%)
+  const SOCIAL = {
+    pensionRate: 950, // 1만분의
+    pensionLimits: [{ from: '2025-07-01', min: 400000, max: 6370000 }, { from: '2026-07-01', min: 410000, max: 6590000 }],
+    healthRate: 719, ltcRate: 9448 / 100, // 1만분의 (장기요양 0.9448%)
+    healthMin: 20160, healthMax: 9183480,
+    empRate: 180, empStability: { small: 25, priority: 45, mid: 65, large: 85 },
+  };
+  const fl = (x) => Math.floor(x + 1e-7);
+  // o: { pay(월 보수 = 세전 월급 - 비과세), at(기준일, 기본 2026-07-01), size('small'|'priority'|'mid'|'large'),
+  //      accidentPct(산재 요율 %, 선택), noPension(만 60세 이상), lateHire(65세 이후 고용: 실업급여분 제외) }
+  function socialInsurance(o) {
+    const S = SOCIAL, pay = Math.max(0, Math.floor(o.pay || 0)), at = o.at || parseDate('2026-07-01');
+    let lim = S.pensionLimits[0];
+    S.pensionLimits.forEach((l) => { if (at >= parseDate(l.from)) lim = l; });
+    const zero = pay === 0;
+    const pensionBase = zero || o.noPension ? 0 : Math.min(lim.max, Math.max(lim.min, Math.floor(pay / 1000) * 1000));
+    const pension = fl(pensionBase * S.pensionRate / 20000);
+    const healthTotal = zero ? 0 : Math.min(S.healthMax, Math.max(S.healthMin, fl(pay * S.healthRate / 10000)));
+    const health = fl(healthTotal / 2);
+    const ltc = fl(health * S.ltcRate / S.healthRate);
+    const empEmployee = zero || o.lateHire ? 0 : fl(pay * S.empRate / 20000);
+    const empEmployer = zero ? 0 : empEmployee + fl(pay * S.empStability[o.size || 'small'] / 10000);
+    const accident = fl(pay * (o.accidentPct || 0) / 100);
+    const employee = pension + health + ltc + empEmployee;
+    const employer = pension + health + ltc + empEmployer + accident;
+    return { pay, pensionBase, pensionLimit: lim, pension, healthTotal, health, ltc, empEmployee, empEmployer, accident,
+      employee, employer, total: employee + employer, takeHome: pay - employee };
+  }
+
   // ---------- 표시 ----------
   function comma(n, digits) {
     if (!isFinite(n)) return '-';
@@ -514,6 +551,7 @@
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
     PENSION, pensionCredit, prepaymentFee,
     serviceYears, serviceDeduction, convertedPayDeduction, retirementTax,
+    SOCIAL, socialInsurance,
     comma, won, korean,
   };
 

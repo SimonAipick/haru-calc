@@ -183,6 +183,23 @@ eq('rt years +1day', C.serviceYears(D('2016-03-02'), D('2026-03-02')), 11);
 eq('rt years short', C.serviceYears(D('2025-01-01'), D('2025-06-30')), 1);
 eq('rt dates', C.retirementTax({ pay: 1e8, start: D('2006-01-02'), last: D('2025-12-31') }).tax, 1120000, 0);
 
+// 4대보험 (2026년 요율, 손으로 계산한 값)
+var si = C.socialInsurance({ pay: 3000000 });
+eq('si pension', si.pension, 142500, 0); eq('si health', si.health, 107850, 0); eq('si ltc', si.ltc, 14172, 0);
+eq('si emp', si.empEmployee, 27000, 0); eq('si employer emp', si.empEmployer, 34500, 0); eq('si employee', si.employee, 291522, 0);
+eq('si employer', si.employer, 299022, 0);
+var sh = C.socialInsurance({ pay: 8000000 });
+eq('si cap pension', sh.pension, 313025, 0); eq('si high health', sh.health, 287600, 0); eq('si high ltc', sh.ltc, 37792, 0);
+var sl = C.socialInsurance({ pay: 300000 });
+eq('si min pension', sl.pension, 19475, 0); eq('si low health', sl.health, 10785, 0); eq('si low ltc', sl.ltc, 1417, 0);
+eq('si health floor', C.socialInsurance({ pay: 200000 }).health, 10080, 0);
+eq('si before july', C.socialInsurance({ pay: 2555555, at: D('2026-03-01') }).pension, 121362, 0);
+eq('si before july cap', C.socialInsurance({ pay: 7000000, at: D('2026-03-01') }).pension, 302575, 0);
+eq('si large employer', C.socialInsurance({ pay: 5000000, size: 'large' }).empEmployer, 87500, 0);
+eq('si accident', C.socialInsurance({ pay: 3000000, accidentPct: 1.47 }).accident, 44100, 0);
+var s60 = C.socialInsurance({ pay: 3000000, noPension: true, lateHire: true });
+eq('si 60 pension', s60.pension, 0); eq('si late emp', s60.empEmployee, 0); eq('si late employer', s60.empEmployer, 7500, 0);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }
