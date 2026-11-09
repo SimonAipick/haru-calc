@@ -200,6 +200,22 @@ eq('si accident', C.socialInsurance({ pay: 3000000, accidentPct: 1.47 }).acciden
 var s60 = C.socialInsurance({ pay: 3000000, noPension: true, lateHire: true });
 eq('si 60 pension', s60.pension, 0); eq('si late emp', s60.empEmployee, 0); eq('si late employer', s60.empEmployer, 7500, 0);
 
+// 대출 갈아타기: 인지세(인지세법 제3조①2호·제6조8호)
+eq('stamp 1e7', C.loanStampTax(1e7), 0); eq('stamp 5e7', C.loanStampTax(5e7), 0); eq('stamp 5e7+1', C.loanStampTax(50000001), 70000);
+eq('stamp 1e8', C.loanStampTax(1e8), 70000); eq('stamp 1.5e8', C.loanStampTax(1.5e8), 150000); eq('stamp 1e9', C.loanStampTax(1e9), 150000); eq('stamp 1.2e9', C.loanStampTax(1.2e9), 350000);
+// 원금균등 1,200만원 12개월 6% → 3%: 이자 390,000 → 195,000. 월 이자 차이 2,500×(13-k), 누적 30,000·57,500·82,500·105,000 → 비용 10만원은 4개월째 회수
+var rf = C.refinance({ balance: 12e6, months: 12, curRatePct: 6, newRatePct: 3, method: 'principal', fee: 0, costs: 100000 });
+eq('rf principal saving', rf.saving, 95000, 0.01); eq('rf principal breakeven', rf.breakeven, 4);
+// 만기일시 1억 12개월 5% → 4%: 이자 차이 100만원, 수수료 30만 + 인지세 절반 7.5만 → 62.5만원 이득, 월 83,333원씩 → 5개월째 37.5만원 회수
+var rb = C.refinance({ balance: 1e8, months: 12, curRatePct: 5, newRatePct: 4, method: 'bullet', fee: 300000, costs: 75000 });
+eq('rf bullet saving', rb.saving, 625000, 0.01); eq('rf bullet breakeven', rb.breakeven, 5);
+// 원리금균등 1억 360개월 4.5% → 3.5%: 월 506,685.31 → 449,044.69, 총이자 차이 (506,685.31-449,044.69)×360 = 20,750,623.93
+var ra = C.refinance({ balance: 1e8, months: 360, curRatePct: 4.5, newRatePct: 3.5, method: 'annuity', fee: 300000, costs: 75000 });
+eq('rf annuity cur pmt', ra.curFirst, 506685.31, 0.01); eq('rf annuity new pmt', ra.newFirst, 449044.69, 0.01); eq('rf annuity saving', ra.saving, 20375623.93, 0.05);
+// 금리가 같으면 비용만큼 손해, 회수 시점 없음
+var rs = C.refinance({ balance: 5e7, months: 60, curRatePct: 4, newRatePct: 4, method: 'annuity', fee: 100000, costs: 0 });
+eq('rf same saving', rs.saving, -100000, 0.01); eq('rf same breakeven', rs.breakeven, null);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

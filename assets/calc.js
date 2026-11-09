@@ -445,6 +445,32 @@
     return { windowEnd, windowDays, remaining, base, fee, exempt: remaining === 0, waitInterest };
   }
 
+  // ---------- 대출 갈아타기(대환) ----------
+  // 인지세: 인지세법 제3조①2호(금융기관과의 금전소비대차 증서, 1호 세액 준용), 제6조8호(기재금액 5천만원 이하 비과세)
+  // (law.go.kr 2026-11-09 확인: 법률 제21065호 시행 2025. 10. 1.)
+  function loanStampTax(amount) {
+    if (amount <= 5000 * MAN) return 0;
+    if (amount <= 10000 * MAN) return 7 * MAN;
+    if (amount <= 100000 * MAN) return 15 * MAN;
+    return 35 * MAN;
+  }
+  // o: { balance(남은 원금), months(남은 개월), curRatePct, newRatePct, newMonths(기본 = months), method, fee(중도상환수수료), costs(새 대출 부대비용) }
+  // 새 대출은 남은 원금과 같은 금액으로 받고, 수수료·부대비용은 따로 낸다고 본다.
+  function refinance(o) {
+    const cur = loan(o.balance, o.curRatePct, o.months, o.method);
+    const nw = loan(o.balance, o.newRatePct, o.newMonths || o.months, o.method);
+    const upfront = (o.fee || 0) + (o.costs || 0);
+    const saving = cur.totalInterest - nw.totalInterest - upfront;
+    let cum = 0, breakeven = null;
+    const n = Math.max(cur.rows.length, nw.rows.length);
+    for (let k = 0; k < n; k++) {
+      cum += (cur.rows[k] ? cur.rows[k].interest : 0) - (nw.rows[k] ? nw.rows[k].interest : 0);
+      if (cum >= upfront - 1e-6 && breakeven == null && cum > 0) { breakeven = k + 1; break; }
+    }
+    if (upfront === 0 && saving <= 0) breakeven = null;
+    return { cur, nw, upfront, saving, breakeven, curFirst: cur.rows[0].payment, newFirst: nw.rows[0].payment };
+  }
+
   // ---------- 퇴직소득세 ----------
   // 근거: 소득세법 제48조(퇴직소득공제)·제55조제2항(퇴직소득 산출세액)·제129조제1항제5호의3, 시행령 제105조(근속연수)
   // (law.go.kr 2026-11-07 확인: 법률 제21221호 시행 2026. 1. 1., 시행령 시행 2026. 10. 1.)
@@ -549,7 +575,7 @@
     earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, medicalCredit, yearEndTax,
     CAR_TAX, carCcRate, carAge, carTax,
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
-    PENSION, pensionCredit, prepaymentFee,
+    PENSION, pensionCredit, prepaymentFee, loanStampTax, refinance,
     serviceYears, serviceDeduction, convertedPayDeduction, retirementTax,
     SOCIAL, socialInsurance,
     comma, won, korean,

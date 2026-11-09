@@ -1,0 +1,117 @@
+<!--
+{"slug": "refinance", "title": "대출 갈아타기 계산기 (대환대출 이자 비교)", "category": "금융", "order": 10,
+ "short": "주담대·신용대출 대환 손익",
+ "description": "지금 대출과 갈아탈 대출의 금리, 남은 기간을 넣으면 앞으로 낼 이자 차이에서 중도상환수수료와 인지세를 뺀 실제 이득, 월 상환액 변화, 비용을 회수하는 달을 계산합니다. 인지세법 제3조·제6조 원문 기준.",
+ "lead": "갈아타면 이자가 얼마나 줄고, 수수료와 인지세를 빼고도 남는지 계산합니다."}
+-->
+<!-- 근거: 인지세법 제3조 제1항 제2호(금융·보험기관과의 금전소비대차 증서, 제1호 세액 준용), 제6조 제8호(기재금액 5천만원 이하 비과세)
+     https://www.law.go.kr/법령/인지세법/제3조 , https://www.law.go.kr/법령/인지세법/제6조 (법률 제21065호, 시행 2025. 10. 1., 2026-11-09 확인)
+     중도상환수수료: 금융소비자보호법 제20조, tools/prepayment-fee.html 과 같은 산식 -->
+<form id="f" class="calc" novalidate>
+  <div class="grid2">
+    <label>남은 대출 원금<input id="balance" class="money" inputmode="numeric" placeholder="예: 300,000,000"></label>
+    <label>남은 기간 (개월)<input type="number" id="months" inputmode="numeric" min="1" max="600" step="1" placeholder="예: 300"></label>
+    <label>지금 금리 (%)<input id="cur" inputmode="decimal" placeholder="예: 4.8"></label>
+    <label>갈아탈 대출 금리 (%)<input id="new" inputmode="decimal" placeholder="예: 3.9"></label>
+    <label>갈아탈 대출 기간 (개월, 비우면 남은 기간과 같게)<input type="number" id="newMonths" inputmode="numeric" min="1" max="600" step="1" placeholder="예: 300"></label>
+  </div>
+  <fieldset>
+    <legend>상환 방식 (두 대출 같다고 봄)</legend>
+    <div class="seg">
+      <label><input type="radio" name="method" value="annuity" checked> 원리금균등</label>
+      <label><input type="radio" name="method" value="principal"> 원금균등</label>
+      <label><input type="radio" name="method" value="bullet"> 만기일시</label>
+    </div>
+  </fieldset>
+  <div class="grid2">
+    <label>지금 대출 실행일 (중도상환수수료 계산용)<input type="date" id="start"></label>
+    <label>중도상환수수료율 (%)<input id="feeRate" inputmode="decimal" placeholder="예: 0.6 (3년 지났으면 비움)"></label>
+    <label>갈아타는 날<input type="date" id="repay"></label>
+    <label>그 밖의 비용 (선택: 보증료·감정료 등)<input id="other" class="money" inputmode="numeric" placeholder="예: 0"></label>
+  </div>
+  <label class="check"><input type="checkbox" id="stamp" checked> 새 대출 인지세의 절반을 내가 낸다고 보기</label>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.today('repay');
+UI.bind('f', 'out', function () {
+  const balance = UI.num('balance'), months = Math.round(UI.num('months'));
+  if (!balance || !months || !UI.$('cur').value.trim() || !UI.$('new').value.trim()) return null;
+  if (months > 600) throw new Error('남은 기간은 600개월(50년)까지 넣을 수 있습니다.');
+  const curRatePct = UI.num('cur'), newRatePct = UI.num('new');
+  if (curRatePct > 30 || newRatePct > 30) throw new Error('금리는 % 단위로 넣어 주세요 (예: 4.8).');
+  const newMonths = Math.round(UI.num('newMonths')) || months;
+  if (newMonths > 600) throw new Error('갈아탈 대출 기간은 600개월까지 넣을 수 있습니다.');
+  const method = UI.val('method');
+  let fee = 0, feeNote = '중도상환수수료율이나 실행일을 비워서 수수료는 0원으로 계산했습니다.';
+  const start = UI.date('start'), repay = UI.date('repay'), feeRate = UI.num('feeRate');
+  if (start && repay && feeRate > 0) {
+    if (repay < start) throw new Error('갈아타는 날이 대출 실행일보다 앞입니다.');
+    const pf = Calc.prepaymentFee({ amount: balance, ratePct: feeRate, start, repay });
+    fee = pf.fee;
+    feeNote = pf.exempt ? '실행일부터 3년이 지나 중도상환수수료가 없습니다.'
+      : '중도상환수수료 = ' + Calc.won(balance) + ' × ' + feeRate + '% × 남은 ' + Calc.comma(pf.remaining) + '일 ÷ ' + Calc.comma(pf.windowDays) + '일';
+  }
+  const stampTax = Calc.loanStampTax(balance);
+  const stampMine = UI.$('stamp').checked ? stampTax / 2 : 0;
+  const costs = stampMine + (UI.num('other') || 0);
+  const r = Calc.refinance({ balance, months, curRatePct, newRatePct, newMonths, method, fee, costs });
+  const label = method === 'annuity' ? '월 상환액' : method === 'principal' ? '첫 달 상환액' : '월 이자';
+  const pay = (x) => method === 'bullet' ? x.rows[0].interest : x.rows[0].payment;
+  const rows = [
+    ['지금 대출로 앞으로 낼 이자', Calc.won(r.cur.totalInterest)],
+    ['갈아탄 대출로 낼 이자', Calc.won(r.nw.totalInterest)],
+    ['이자 차이', Calc.won(r.cur.totalInterest - r.nw.totalInterest)],
+    ['중도상환수수료', Calc.won(fee)],
+    ['인지세 (내 몫)', Calc.won(stampMine) + (stampTax ? ' (전체 ' + Calc.won(stampTax) + ')' : ' (5천만원 이하 비과세)')],
+    ['그 밖의 비용', Calc.won(UI.num('other') || 0)],
+    [label, Calc.won(pay(r.cur)) + ' → ' + Calc.won(pay(r.nw))],
+    ['비용을 회수하는 달', r.breakeven ? r.breakeven + '개월째' : '회수하지 못함'],
+  ];
+  const notes = [feeNote];
+  if (newMonths !== months) notes.push('기간이 달라 월 상환액과 총이자가 함께 바뀝니다. 기간을 늘리면 월 부담은 줄어도 총이자는 늘 수 있습니다.');
+  notes.push('금리가 끝까지 그대로라고 보고 계산했습니다. 변동금리는 실제 이자가 달라질 수 있습니다. 원 미만은 반올림해 표시했습니다.');
+  const head = r.saving >= 0 ? ['갈아타면 아끼는 돈', Calc.won(r.saving)] : ['갈아타면 손해', Calc.won(-r.saving)];
+  return UI.result(head, rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>갈아타기 손익은 이렇게 계산합니다</h2>
+<p class="formula">실제 이득 = (지금 대출의 남은 이자 − 새 대출 이자) − 중도상환수수료 − 인지세(내 몫) − 그 밖의 비용</p>
+<ul>
+  <li><strong>남은 이자:</strong> 남은 원금과 남은 기간으로 앞으로 낼 이자를 상환 방식대로 다시 계산합니다. 이미 낸 이자는 갈아타도 돌려받지 못하니 넣지 않습니다.</li>
+  <li><strong>중도상환수수료:</strong> 지금 대출을 실행일부터 3년 안에 갚으면 붙습니다. 계산식은 <a href="../prepayment-fee/">중도상환수수료 계산기</a>와 같습니다.</li>
+  <li><strong>비용을 회수하는 달:</strong> 매달 줄어드는 이자를 쌓아 수수료와 비용을 넘는 달입니다. 그 전에 다시 갈아타거나 집을 팔 계획이면 손해일 수 있습니다.</li>
+</ul>
+<p>예를 들어 2024년 5월 1일에 받은 주택담보대출의 남은 원금이 3억원, 남은 기간 300개월, 금리 4.8%(원리금균등)이고, 2026년 11월 9일 3.9%로 갈아탄다고 해 보겠습니다. 중도상환수수료율이 0.6%면 수수료는 284,383원, 인지세 15만원 중 절반 75,000원을 냅니다. 월 상환액은 1,718,991원에서 1,566,993원으로 줄고, 앞으로 낼 이자는 215,697,266원에서 170,097,876원으로 줄어 비용을 빼고도 <strong>45,240,007원</strong>을 아낍니다. 비용은 2개월째에 회수됩니다.</p>
+
+<h2>대출 인지세는 얼마인가요?</h2>
+<p>금융기관과 맺는 대출 약정서(금전소비대차 증서)에는 인지세가 붙습니다. 인지세법 제3조와 제6조에 따른 금액은 아래와 같습니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>대출 금액(약정서 기재금액)</th><th>인지세</th></tr></thead>
+  <tbody>
+    <tr><td>5천만원 이하</td><td>없음 (비과세)</td></tr>
+    <tr><td>5천만원 초과 1억원 이하</td><td>7만원</td></tr>
+    <tr><td>1억원 초과 10억원 이하</td><td>15만원</td></tr>
+    <tr><td>10억원 초과</td><td>35만원</td></tr>
+  </tbody>
+</table>
+</div>
+<p>은행 대출은 보통 고객과 은행이 인지세를 절반씩 냅니다. 상품마다 다를 수 있으니 상품설명서를 확인하고, 다르면 체크를 풀고 '그 밖의 비용'에 직접 넣으세요.</p>
+
+<h2>갈아타기 전에 확인할 것</h2>
+<ul>
+  <li><strong>대출 한도가 다시 계산됩니다.</strong> 갈아타는 대출도 새 대출이라 그때의 LTV·DSR 규제를 다시 받습니다. 규제가 강해졌으면 지금 남은 원금만큼 빌리지 못할 수도 있습니다.</li>
+  <li><strong>금리 종류를 비교하세요.</strong> 고정금리와 변동금리는 앞으로의 금리 변화에 따라 결과가 달라집니다. 이 계산기는 금리가 끝까지 그대로라고 봅니다.</li>
+  <li><strong>새 대출에도 중도상환수수료가 있습니다.</strong> 갈아탄 뒤 3년 안에 다시 갈아타거나 갚으면 새 대출의 수수료가 붙습니다.</li>
+  <li><strong>우대금리 조건:</strong> 급여 이체, 카드 사용 같은 조건을 못 지키면 금리가 올라갑니다. 우대가 빠진 금리로도 한 번 계산해 보세요.</li>
+</ul>
+
+<h2>자주 묻는 질문</h2>
+<h3>기간을 늘려서 갈아타면 이득인가요?</h3>
+<p>월 상환액은 줄지만 이자를 내는 기간이 길어져 총이자는 늘 수 있습니다. '갈아탈 대출 기간'에 늘린 기간을 넣으면 두 효과를 함께 계산해 줍니다.</p>
+<h3>금리가 얼마나 내려가야 갈아탈 만한가요?</h3>
+<p>남은 원금과 기간, 수수료에 따라 다릅니다. 남은 기간이 짧거나 3년 안이라 수수료가 크면 금리 차이가 커야 하고, 3년이 지난 대출은 작은 금리 차이도 이득이 될 수 있습니다. 위 계산기에서 금리를 바꿔 가며 '비용을 회수하는 달'을 보세요.</p>
+<h3>근저당 설정비도 내야 하나요?</h3>
+<p>은행 주택담보대출의 근저당 설정 비용은 보통 은행이 냅니다. 다만 상품이나 금융회사에 따라 다를 수 있으니 상품설명서에서 고객 부담 비용을 확인해 '그 밖의 비용'에 넣으세요.</p>
