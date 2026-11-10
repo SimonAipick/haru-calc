@@ -216,6 +216,25 @@ eq('rf annuity cur pmt', ra.curFirst, 506685.31, 0.01); eq('rf annuity new pmt',
 var rs = C.refinance({ balance: 5e7, months: 60, curRatePct: 4, newRatePct: 4, method: 'annuity', fee: 100000, costs: 0 });
 eq('rf same saving', rs.saving, -100000, 0.01); eq('rf same breakeven', rs.breakeven, null);
 
+// 청년도약계좌: 금융위 2024-12-26 기여금 확대(월 최대 3.3만/2.9만/2.5만/2.1만), 손계산
+eq('yl c2400', C.youthLeapContribution(700000, '2400', false), 33000);
+eq('yl c3600', C.youthLeapContribution(700000, '3600', false), 29000);
+eq('yl c4800', C.youthLeapContribution(700000, '4800', false), 25200);
+eq('yl c6000', C.youthLeapContribution(700000, '6000', false), 21000);
+eq('yl c7500', C.youthLeapContribution(700000, '7500', false), 0);
+eq('yl c2400 old', C.youthLeapContribution(700000, '2400', true), 24000);
+eq('yl c300k', C.youthLeapContribution(300000, '2400', false), 18000);
+var yl = C.youthLeap({ monthly: 700000, bracket: '2400', ratePct: 4.5, oldMonths: 0 });
+eq('yl principal', yl.principal, 42000000); eq('yl contrib', yl.contrib, 1980000);
+eq('yl interest', yl.interest, 4803750); eq('yl cint', yl.contribInterest, 226462.5);
+eq('yl total', yl.total, 49010212.5); eq('yl taxSaved', yl.taxSaved, 774652.725, 0.01);
+eq('yl early3y', yl.early3y, 42000000 + 1188000);
+var yl2 = C.youthLeap({ monthly: 700000, bracket: '2400', ratePct: 4.5, oldMonths: 12 });
+eq('yl old contrib', yl2.contrib, 1872000); eq('yl old cint', yl2.contribInterest, 204390);
+eq('yl 7500 contrib', C.youthLeap({ monthly: 500000, bracket: '7500', ratePct: 4.5 }).contrib, 0);
+var ylErr = null; try { C.youthLeap({ monthly: 800000, bracket: '2400', ratePct: 4 }); } catch (e) { ylErr = e.message; }
+eq('yl over limit', ylErr, '월 납입 한도는 70만원입니다.');
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

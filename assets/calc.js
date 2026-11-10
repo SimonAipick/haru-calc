@@ -471,6 +471,50 @@
     return { cur, nw, upfront, saving, breakeven, curFirst: cur.rows[0].payment, newFirst: nw.rows[0].payment };
   }
 
+  // ---------- 청년도약계좌 (기존 가입자) ----------
+  // 근거: 금융위원회 2023-03-08(fsc.go.kr/no010101/79546) 기여금 기본 구간, 2024-12-26(fsc.go.kr/no010101/83729)
+  // '25년 1월 납입분부터 기여금 지급 한도 70만원으로 확대(추가분 3.0%, 기존 가입자 포함), 조특법 제91조의22(연 840만원, 비과세)
+  // 서민금융진흥원 상품 안내(월 70만원, 5년, 신규 가입 2025-12-31 종료). 2026-11-10 확인
+  const YOUTH_LEAP = {
+    maxMonthly: 70 * MAN, term: 60, maxOldMonths: 19, extraRate: 0.03, earlyShare: 0.6, tax: 0.154,
+    brackets: {
+      '2400': { limit: 40 * MAN, rate: 0.06 }, '3600': { limit: 50 * MAN, rate: 0.046 },
+      '4800': { limit: 60 * MAN, rate: 0.037 }, '6000': { limit: 70 * MAN, rate: 0.03 }, '7500': null,
+    },
+  };
+  // 한 달 기여금. old=true면 2024년 12월 이전 납입분(추가 구간 없음)
+  function youthLeapContribution(monthly, bracket, old) {
+    const b = YOUTH_LEAP.brackets[bracket];
+    if (!b) return 0;
+    const base = Math.min(monthly, b.limit) * b.rate;
+    if (old) return base;
+    return base + Math.max(0, Math.min(monthly, YOUTH_LEAP.maxMonthly) - b.limit) * YOUTH_LEAP.extraRate;
+  }
+  // o: { monthly, bracket, ratePct, oldMonths(2024년 12월 이전 납입 개월 수) }
+  // 매달 같은 금액을 60개월 넣고, 기여금도 같은 달에 같은 금리로 단리 이자가 붙는다고 가정한 추정
+  function youthLeap(o) {
+    const Y = YOUTH_LEAP, n = Y.term;
+    if (o.monthly > Y.maxMonthly) throw new Error('월 납입 한도는 70만원입니다.');
+    const old = Math.max(0, Math.min(Y.maxOldMonths, Math.round(o.oldMonths || 0)));
+    const r = (o.ratePct || 0) / 100 / 12;
+    let contrib = 0, contribInterest = 0;
+    for (let k = 1; k <= n; k++) {
+      const c = youthLeapContribution(o.monthly, o.bracket, k <= old);
+      contrib += c;
+      contribInterest += c * r * (n - k + 1);
+    }
+    const principal = o.monthly * n;
+    const interest = o.monthly * r * n * (n + 1) / 2;
+    const total = principal + contrib + interest + contribInterest;
+    const taxSaved = (interest + contribInterest) * Y.tax;
+    const plainNet = principal + interest * (1 - Y.tax);
+    return {
+      principal, contrib, interest, contribInterest, total, taxSaved, plainNet, gain: total - plainNet,
+      monthlyContribNow: youthLeapContribution(o.monthly, o.bracket, false),
+      early3y: principal + contrib * Y.earlyShare, // 3년 이상 유지 후 해지: 원금 + 기여금 60% (이자는 은행 중도해지이율이라 제외)
+    };
+  }
+
   // ---------- 퇴직소득세 ----------
   // 근거: 소득세법 제48조(퇴직소득공제)·제55조제2항(퇴직소득 산출세액)·제129조제1항제5호의3, 시행령 제105조(근속연수)
   // (law.go.kr 2026-11-07 확인: 법률 제21221호 시행 2026. 1. 1., 시행령 시행 2026. 10. 1.)
@@ -578,6 +622,7 @@
     PENSION, pensionCredit, prepaymentFee, loanStampTax, refinance,
     serviceYears, serviceDeduction, convertedPayDeduction, retirementTax,
     SOCIAL, socialInsurance,
+    YOUTH_LEAP, youthLeapContribution, youthLeap,
     comma, won, korean,
   };
 
