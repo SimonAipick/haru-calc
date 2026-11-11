@@ -612,6 +612,51 @@
     return sign + parts.join(' ');
   }
 
+
+  // ---------- 학점(평점평균) ----------
+  // 등급별 평점: 4.5 만점 명지대 성적평가 안내, 4.3 만점 서울대(학칙 제76조)·연세대·KAIST 안내 (2026-11-11 확인)
+  const GPA = {
+    scales: {
+      '4.5': { 'A+': 4.5, 'A0': 4.0, 'B+': 3.5, 'B0': 3.0, 'C+': 2.5, 'C0': 2.0, 'D+': 1.5, 'D0': 1.0, 'F': 0 },
+      '4.3': { 'A+': 4.3, 'A0': 4.0, 'A-': 3.7, 'B+': 3.3, 'B0': 3.0, 'B-': 2.7, 'C+': 2.3, 'C0': 2.0, 'C-': 1.7,
+        'D+': 1.3, 'D0': 1.0, 'D-': 0.7, 'F': 0 },
+    },
+    passGrades: ['P', 'S'],     // 평점평균에서 빼고 취득학점에는 넣음
+    failNoGpa: ['NP', 'U'],     // 평점평균에서 빼고 취득학점도 아님
+  };
+  function round2(x) { return Math.round(x * 100 + (x >= 0 ? 1e-9 : -1e-9)) / 100; }
+  // courses: [{credits, grade}] → Σ(학점×평점) ÷ 평점 대상 학점 (F 포함, P/S/NP/U 제외)
+  function gpa(courses, scale) {
+    const table = GPA.scales[scale];
+    if (!table) throw new Error('만점 기준은 4.5 또는 4.3만 됩니다.');
+    let points = 0, gradedCredits = 0, earnedCredits = 0, passCredits = 0;
+    courses.forEach((c) => {
+      const cr = Number(c.credits);
+      if (!(cr > 0)) return;
+      if (GPA.passGrades.indexOf(c.grade) >= 0) { earnedCredits += cr; passCredits += cr; return; }
+      if (GPA.failNoGpa.indexOf(c.grade) >= 0) return;
+      if (!(c.grade in table)) throw new Error(scale + ' 만점에 없는 등급입니다: ' + c.grade);
+      points += cr * table[c.grade];
+      gradedCredits += cr;
+      if (c.grade !== 'F') earnedCredits += cr;
+    });
+    const raw = gradedCredits ? points / gradedCredits : null;
+    return { points, gradedCredits, earnedCredits, passCredits, raw, gpa: raw === null ? null : round2(raw) };
+  }
+  // 단순 비례 환산 (학교별 환산표가 따로 있으면 그쪽이 우선)
+  function gpaConvert(value, fromMax, toMax) {
+    if (!(fromMax > 0) || !(toMax > 0)) throw new Error('만점은 0보다 커야 합니다.');
+    if (value < 0 || value > fromMax) throw new Error('평점은 0 ~ ' + fromMax + ' 사이로 넣어 주세요.');
+    return value / fromMax * toMax;
+  }
+  // 목표 평점까지 남은 학점에서 받아야 할 평균
+  function gpaTarget(o) {
+    if (!(o.remCredits > 0)) throw new Error('남은 학점을 넣어 주세요.');
+    const need = (o.target * (o.doneCredits + o.remCredits) - o.current * o.doneCredits) / o.remCredits;
+    return { need, possible: need <= o.max + 1e-9, already: need <= 0,
+      bestCase: (o.current * o.doneCredits + o.max * o.remCredits) / (o.doneCredits + o.remCredits) };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -623,6 +668,7 @@
     serviceYears, serviceDeduction, convertedPayDeduction, retirementTax,
     SOCIAL, socialInsurance,
     YOUTH_LEAP, youthLeapContribution, youthLeap,
+    GPA, gpa, gpaConvert, gpaTarget,
     comma, won, korean,
   };
 

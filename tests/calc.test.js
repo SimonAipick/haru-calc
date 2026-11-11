@@ -235,6 +235,23 @@ eq('yl 7500 contrib', C.youthLeap({ monthly: 500000, bracket: '7500', ratePct: 4
 var ylErr = null; try { C.youthLeap({ monthly: 800000, bracket: '2400', ratePct: 4 }); } catch (e) { ylErr = e.message; }
 eq('yl over limit', ylErr, '월 납입 한도는 70만원입니다.');
 
+
+// 학점: 손계산 (4.5 만점 명지대, 4.3 만점 서울대 등급표)
+var g1 = C.gpa([{ credits: 3, grade: 'A+' }, { credits: 3, grade: 'B0' }, { credits: 2, grade: 'F' }, { credits: 2, grade: 'P' }], '4.5');
+eq('gpa45 raw', g1.raw, 2.8125, 1e-9); eq('gpa45 round', g1.gpa, 2.81); eq('gpa45 graded', g1.gradedCredits, 8); eq('gpa45 earned', g1.earnedCredits, 8);
+var g2 = C.gpa([{ credits: 3, grade: 'A-' }, { credits: 3, grade: 'B+' }, { credits: 1, grade: 'A+' }, { credits: 2, grade: 'U' }], '4.3');
+eq('gpa43 raw', g2.raw, 25.3 / 7, 1e-9); eq('gpa43 round', g2.gpa, 3.61); eq('gpa43 earned', g2.earnedCredits, 7);
+eq('gpa round half', C.gpa([{ credits: 1, grade: 'A+' }, { credits: 1, grade: 'C+' }, { credits: 2, grade: 'B+' }, { credits: 4, grade: 'A0' }], '4.5').gpa, 3.75);
+eq('gpa only P', C.gpa([{ credits: 3, grade: 'P' }], '4.5').gpa, null);
+var gErr = null; try { C.gpa([{ credits: 3, grade: 'A-' }], '4.5'); } catch (e) { gErr = e.message; }
+eq('gpa bad grade', gErr, '4.5 만점에 없는 등급입니다: A-');
+eq('gpa conv 45-43', C.gpaConvert(3.8, 4.5, 4.3), 3.6311111, 1e-6); eq('gpa conv pct', C.gpaConvert(3.8, 4.5, 100), 84.4444444, 1e-6);
+eq('gpa conv 43-45', C.gpaConvert(4.0, 4.3, 4.5), 4.1860465, 1e-6);
+var gt = C.gpaTarget({ current: 3.2, doneCredits: 90, remCredits: 30, target: 3.5, max: 4.5 });
+eq('gpa target need', gt.need, 4.4, 1e-9); eq('gpa target possible', gt.possible, true);
+var gt2 = C.gpaTarget({ current: 3.2, doneCredits: 90, remCredits: 30, target: 3.6, max: 4.5 });
+eq('gpa target impossible', gt2.possible, false); eq('gpa target best', gt2.bestCase, 3.525, 1e-9);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

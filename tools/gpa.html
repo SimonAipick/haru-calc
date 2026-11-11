@@ -1,0 +1,185 @@
+<!--
+{"slug": "gpa", "title": "학점 계산기 (평점평균·4.5↔4.3 환산)", "category": "생활", "order": 8,
+ "short": "평점평균·만점 환산·목표 학점",
+ "description": "과목별 학점과 성적을 넣으면 평점평균(GPA)을 계산하고, 4.5 만점과 4.3 만점, 100점 만점으로 바꿔 보고, 졸업까지 목표 학점을 맞추려면 남은 학기에 몇 점을 받아야 하는지 알려 줍니다. P/F 과목 처리와 학교별 환산표 차이도 정리했습니다.",
+ "lead": "이번 학기 성적이 나왔다면 평점평균부터 바로 계산해 보세요. 4.5와 4.3 만점 환산, 목표 학점 계산도 한 페이지에서 됩니다."}
+-->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>무엇을 계산할까요?</legend>
+    <div class="seg">
+      <label><input type="radio" name="mode" value="avg" checked> 평점평균</label>
+      <label><input type="radio" name="mode" value="conv"> 만점 환산</label>
+      <label><input type="radio" name="mode" value="target"> 목표 학점</label>
+    </div>
+  </fieldset>
+  <label>우리 학교 만점 기준<select id="scale">
+    <option value="4.5">4.5 만점 (A+ 4.5, A0 4.0, B+ 3.5 …)</option>
+    <option value="4.3">4.3 만점 (A+ 4.3, A0 4.0, A- 3.7 …)</option>
+  </select></label>
+
+  <div id="pane-avg" class="rows">
+    <div id="rows" class="rows"></div>
+    <p><button type="button" id="add" class="secondary">과목 추가</button></p>
+  </div>
+
+  <div id="pane-conv" hidden>
+    <label>내 평점평균<input type="number" id="cv" inputmode="decimal" min="0" max="4.5" step="0.01" placeholder="예: 3.82"></label>
+  </div>
+
+  <div id="pane-target" hidden>
+    <div class="grid2">
+      <label>지금까지 평점평균<input type="number" id="tc" inputmode="decimal" min="0" max="4.5" step="0.01" placeholder="예: 3.2"></label>
+      <label>평점평균에 들어간 학점<input type="number" id="td" inputmode="numeric" min="0" step="1" placeholder="예: 90"></label>
+      <label>앞으로 들을 학점 (P/F 제외)<input type="number" id="tr" inputmode="numeric" min="1" step="1" placeholder="예: 30"></label>
+      <label>목표 평점평균<input type="number" id="tt" inputmode="decimal" min="0" max="4.5" step="0.01" placeholder="예: 3.5"></label>
+    </div>
+  </div>
+  <button type="submit">계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  const rows = UI.$('rows');
+  const sample = [[3, 'A+'], [3, 'B+'], [3, 'A0'], [2, 'B0'], [3, ''], [3, '']];
+  function gradeOptions(scale, sel) {
+    const g = Object.keys(Calc.GPA.scales[scale]).concat(['P', 'NP']);
+    return '<option value="">성적</option>' + g.map(function (x) {
+      return '<option' + (x === sel ? ' selected' : '') + '>' + x + '</option>';
+    }).join('');
+  }
+  function addRow(cr, gr) {
+    const n = rows.children.length + 1;
+    const d = document.createElement('div');
+    d.className = 'grid2 course';
+    d.innerHTML = '<label>과목 ' + n + ' 학점<input type="number" class="cr" inputmode="numeric" min="0" max="10" step="0.5" value="' + (cr || '') + '"></label>' +
+      '<label>과목 ' + n + ' 성적<select class="gr">' + gradeOptions(UI.val('scale'), gr) + '</select></label>';
+    rows.appendChild(d);
+  }
+  sample.forEach(function (s) { addRow(s[0], s[1]); });
+  UI.$('add').addEventListener('click', function () { addRow(3, ''); });
+  UI.$('scale').addEventListener('change', function () {
+    rows.querySelectorAll('select.gr').forEach(function (s) {
+      const v = s.value; s.innerHTML = gradeOptions(UI.val('scale'), v);
+      if (s.value !== v) s.value = '';
+    });
+  });
+
+  function f2(x) { return Calc.comma(x, 2); }
+  UI.bind('f', 'out', function () {
+    const mode = UI.val('mode'), scale = UI.val('scale'), max = Number(scale);
+    ['avg', 'conv', 'target'].forEach(function (m) { UI.$('pane-' + m).hidden = m !== mode; });
+    const other = scale === '4.5' ? 4.3 : 4.5;
+
+    if (mode === 'avg') {
+      const list = [];
+      rows.querySelectorAll('.course').forEach(function (r) {
+        const g = r.querySelector('.gr').value, c = Number(r.querySelector('.cr').value);
+        if (g && c > 0) list.push({ credits: c, grade: g });
+      });
+      if (!list.length) return null;
+      const r = Calc.gpa(list, scale);
+      if (r.gpa === null) return UI.result(['평점평균', '계산할 과목 없음'], [['취득학점', f2(r.earnedCredits) + '학점']],
+        ['P/NP 과목은 평점평균 계산에서 빠집니다. A+ ~ F 성적을 받은 과목을 넣어 주세요.']);
+      return UI.result(['평점평균 (' + scale + ' 만점)', f2(r.gpa)], [
+        ['평점 합계 (학점 × 평점)', f2(r.points)],
+        ['평점평균에 들어간 학점', f2(r.gradedCredits) + '학점'],
+        ['취득학점 (F·NP 제외)', f2(r.earnedCredits) + '학점'],
+        [other + ' 만점 단순 비례 환산', f2(Calc.gpaConvert(r.raw, max, other))],
+        ['100점 만점 단순 비례 환산', Calc.comma(Calc.gpaConvert(r.raw, max, 100), 1) + '점'],
+      ], [
+        '평점평균 = (과목 학점 × 평점)의 합 ÷ 평점 대상 학점이고, 소수 셋째 자리에서 반올림했습니다. F는 0점으로 들어가고 P/NP는 빠집니다.',
+        '재수강으로 지워진 과목, 학점 포기 과목은 빼고 넣으세요. 학교마다 처리 방식이 다르면 학교 성적표 값이 우선입니다.',
+      ]);
+    }
+
+    if (mode === 'conv') {
+      if (UI.$('cv').value === '') return null;
+      const v = UI.num('cv');
+      return UI.result([scale + ' → ' + other + ' 만점 (단순 비례)', f2(Calc.gpaConvert(v, max, other))], [
+        ['100점 만점 단순 비례', Calc.comma(Calc.gpaConvert(v, max, 100), 1) + '점'],
+        ['계산식', f2(v) + ' ÷ ' + scale + ' × ' + other],
+      ], [
+        '단순 비례 환산은 참고용입니다. 성적증명서의 100점 환산 점수는 학교마다 정한 환산표를 쓰기 때문에 이 값과 다를 수 있습니다. 회사나 학교에 낼 때는 성적증명서 값이나 제출처가 정한 환산 방식을 따르세요.',
+      ]);
+    }
+
+    if (UI.$('tc').value === '' || UI.$('tt').value === '' || UI.$('tr').value === '') return null;
+    const o = { current: UI.num('tc'), doneCredits: UI.num('td') || 0, remCredits: UI.num('tr'), target: UI.num('tt'), max: max };
+    if (o.current > max || o.target > max) throw new Error('평점은 ' + scale + '를 넘을 수 없습니다.');
+    const t = Calc.gpaTarget(o);
+    if (t.already) return UI.result(['남은 학기 필요 평균', '이미 달성'], [['남은 학점을 모두 F로 받아도', f2((o.current * o.doneCredits) / (o.doneCredits + o.remCredits))]],
+      ['지금 평점평균만으로도 목표를 넘습니다.']);
+    return UI.result(['남은 ' + o.remCredits + '학점 필요 평균', t.possible ? f2(t.need) + ' 이상' : '불가능'], [
+      ['남은 학점을 모두 A+로 받으면', f2(t.bestCase)],
+      ['목표', f2(o.target) + ' / ' + scale],
+    ], t.possible ? ['남은 과목 평균을 ' + f2(t.need) + ' 이상 받으면 졸업 평점평균이 ' + f2(o.target) + '이 됩니다 (반올림 전 기준).'] :
+      ['남은 학점을 모두 A+로 받아도 목표에 닿지 않습니다. 재수강 제도(이전 성적 삭제)가 있는지 학교 학사 규정을 확인해 보세요.']);
+  });
+})();
+</script>
+<!-- guide -->
+<h2>평점평균(GPA) 계산법</h2>
+<p>평점평균은 과목마다 <strong>학점 × 평점</strong>을 더한 뒤, 평점이 매겨진 학점 수로 나눈 가중평균입니다. 명지대 성적평가 안내는 이 방식을 'Σ(단위학점 × 취득평점) ÷ 총 수강신청 학점 수'로 적고, 소수점 이하 셋째 자리에서 반올림한다고 정해 두었습니다. 다른 학교도 대부분 같은 방식이지만, 반올림 자리나 재수강 처리는 학교 학칙 시행세칙을 따릅니다.</p>
+<ul>
+  <li>예: 3학점 A+, 3학점 B0, 2학점 F (4.5 만점) → (3×4.5 + 3×3.0 + 2×0) ÷ 8 = 22.5 ÷ 8 = <strong>2.81</strong></li>
+  <li>F는 0점으로 평균에 들어가서 평점평균을 크게 끌어내립니다. 위 예에서 F 과목이 없으면 3.75입니다.</li>
+  <li>P(Pass)·NP, S·U처럼 등급 없이 평가하는 과목은 평점평균 계산에서 빠집니다. P와 S는 졸업 학점(취득학점)에는 들어갑니다.</li>
+</ul>
+
+<h2>4.5 만점과 4.3 만점 등급표</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>등급</th><th>4.5 만점</th><th>4.3 만점</th></tr></thead>
+  <tbody>
+    <tr><td>A+</td><td>4.5</td><td>4.3</td></tr>
+    <tr><td>A0</td><td>4.0</td><td>4.0</td></tr>
+    <tr><td>A-</td><td>—</td><td>3.7</td></tr>
+    <tr><td>B+</td><td>3.5</td><td>3.3</td></tr>
+    <tr><td>B0</td><td>3.0</td><td>3.0</td></tr>
+    <tr><td>B-</td><td>—</td><td>2.7</td></tr>
+    <tr><td>C+</td><td>2.5</td><td>2.3</td></tr>
+    <tr><td>C0</td><td>2.0</td><td>2.0</td></tr>
+    <tr><td>C-</td><td>—</td><td>1.7</td></tr>
+    <tr><td>D+</td><td>1.5</td><td>1.3</td></tr>
+    <tr><td>D0</td><td>1.0</td><td>1.0</td></tr>
+    <tr><td>D-</td><td>—</td><td>0.7</td></tr>
+    <tr><td>F</td><td>0</td><td>0</td></tr>
+  </tbody>
+</table></div>
+<p>4.5 만점은 +와 0 두 단계로 0.5점씩, 4.3 만점은 +, 0, - 세 단계로 0.3점씩 차이가 납니다. 서울대·연세대·KAIST는 4.3 만점을 쓰고, 4.5 만점을 쓰는 학교가 더 많습니다.</p>
+
+<h2>4.5 ↔ 4.3 ↔ 100점 환산, 어떻게 해야 맞을까</h2>
+<p>가장 흔한 방법은 <strong>단순 비례</strong>입니다. 4.5 만점 3.8은 3.8 ÷ 4.5 × 4.3 = 3.63(4.3 만점), 3.8 ÷ 4.5 × 100 = 84.4점(100점 만점)이 됩니다. 이 계산기의 환산 값도 이 방식입니다.</p>
+<p>하지만 성적증명서에 찍히는 <strong>100점 환산 점수는 학교마다 따로 정한 표</strong>로 바뀝니다. 예를 들어 서울대는 2023년 학업성적 처리 규정을 고치면서 평점평균을 백분위로 바꾸는 기준을 평점 구간별로 따로 두었고, 명지대는 학칙 시행규칙 별표의 '성적평균평점 백분율환산표'를 씁니다. 그래서 같은 평점이라도 학교에 따라 100점 환산 점수가 몇 점씩 차이 납니다.</p>
+<ul>
+  <li><strong>입사 지원서·대학원 원서에 쓸 때:</strong> 제출처가 환산 방식을 정해 두었으면 그 방식을, 아니면 성적증명서에 찍힌 값을 그대로 쓰세요.</li>
+  <li><strong>만점을 같이 적으라는 칸:</strong> 환산하지 말고 '3.82 / 4.5'처럼 원래 값과 만점을 그대로 적는 것이 가장 정확합니다.</li>
+  <li><strong>단순 비례 값은</strong> 다른 학교 학생과 대략 비교할 때 참고로만 쓰세요.</li>
+</ul>
+
+<h2>목표 학점 계산</h2>
+<p>졸업 평점평균을 목표 값에 맞추려면 남은 학점에서 받아야 할 평균은 다음과 같습니다.</p>
+<p><strong>필요 평균 = (목표 × (들은 학점 + 남은 학점) − 지금 평점평균 × 들은 학점) ÷ 남은 학점</strong></p>
+<ul>
+  <li>예: 90학점 들어 3.2, 남은 30학점, 목표 3.5 → (3.5 × 120 − 3.2 × 90) ÷ 30 = <strong>4.4</strong></li>
+  <li>같은 조건에서 목표가 3.6이면 필요 평균이 4.8이라 4.5 만점으로는 불가능합니다. 남은 학점을 모두 A+로 받아도 3.525입니다.</li>
+  <li>학점이 많이 쌓일수록 평점평균은 잘 움직이지 않습니다. 저학년 때 한 학기 성적이 졸업 평점에 더 크게 남는 이유입니다.</li>
+</ul>
+
+<h2>자주 묻는 질문</h2>
+<h3>재수강하면 이전 F는 어떻게 되나요?</h3>
+<p>대부분의 학교는 재수강하면 이전 성적을 지우고 새 성적만 평점평균에 넣지만, 받을 수 있는 최고 등급을 제한하는 경우가 많습니다(서울대는 A0까지). 지워진 과목은 이 계산기에 넣지 마세요.</p>
+<h3>학기 평점과 누적 평점이 다른 이유는요?</h3>
+<p>학기 평점은 그 학기 과목만, 누적(전체) 평점은 입학 후 모든 과목을 같은 식으로 계산한 값입니다. 누적 평점을 알고 싶으면 모든 학기 과목을 넣거나 '목표 학점' 탭처럼 학기별 평점과 학점으로 가중평균을 내면 됩니다.</p>
+<h3>장학금 기준 학점은 몇 점인가요?</h3>
+<p>국가장학금은 한국장학재단이, 교내 장학금은 학교가 기준을 정합니다. 기준과 만점(4.5 / 4.3 / 100점)을 해당 공고에서 확인하세요. S/U로 바꾼 과목도 장학금 산정에는 원래 성적이 반영되는 학교가 있습니다(연세대 안내).</p>
+
+<h2>근거</h2>
+<ul>
+  <li>명지대학교 성적평가 안내 (4.5 만점 등급표, 가중평균 산식, 소수 셋째 자리 반올림, N/P 제외): https://www.mju.ac.kr/mjukr/12045/subview.do</li>
+  <li>서울대학교 성적등급과 평점 (학칙 제76조, 4.3 만점 등급표, S·U 평점 계산 제외): https://www.snu.ac.kr/academics/resources/certificate/grading</li>
+  <li>서울대 컴퓨터공학부 공지 「학업성적 처리 규정」 일부개정(2023. 6. 30.) 평점평균 백분위 환산 변경: https://cse.snu.ac.kr/ko/community/notice/21938</li>
+  <li>연세대학교 성적 평가 (4.3 만점, S/U 평가): https://www.yonsei.ac.kr/sc/277/subview.do</li>
+  <li>KAIST 성적평가 (4.3 만점, S-U 과목 성적평균 제외): https://kaist.ac.kr/kr/html/edu/03110308.html</li>
+</ul>
+<p>확인일 2026-11-11. 학교별 세부 규정(반올림, 재수강, 환산표)은 다니는 학교의 학칙 시행세칙이 우선합니다.</p>
