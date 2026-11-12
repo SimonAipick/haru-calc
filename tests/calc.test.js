@@ -252,6 +252,20 @@ eq('gpa target need', gt.need, 4.4, 1e-9); eq('gpa target possible', gt.possible
 var gt2 = C.gpaTarget({ current: 3.2, doneCredits: 90, remCredits: 30, target: 3.6, max: 4.5 });
 eq('gpa target impossible', gt2.possible, false); eq('gpa target best', gt2.bestCase, 3.525, 1e-9);
 
+
+// 주택용 전기요금 (저압, 기후 9.0, 연료비 +5, 기금 2.7%) — 손계산
+var eb = C.electricBill({ kwh: 350, month: 11 });
+eq('elec 350 nov base', eb.base, 1600); eq('elec 350 nov energy', eb.energy, 56190); eq('elec 350 nov subtotal', eb.subtotal, 62690);
+eq('elec 350 nov vat', eb.vat, 6269); eq('elec 350 nov fund', eb.fund, 1690); eq('elec 350 nov total', eb.total, 70640);
+eq('elec 350 aug total', C.electricBill({ kwh: 350, month: 8 }).total, 59980);
+eq('elec 150 nov total', C.electricBill({ kwh: 150, month: 11 }).total, 23670);
+var eb5 = C.electricBill({ kwh: 500, month: 11 }); eq('elec 500 energy', eb5.energy, 97650); eq('elec 500 total', eb5.total, 126160);
+var ebs = C.electricBill({ kwh: 1200, month: 1 }); eq('elec 1200 jan super', ebs.isSuper, true); eq('elec 1200 jan energy', ebs.energy, 398540); eq('elec 1200 jan total', ebs.total, 476310);
+var ebn = C.electricBill({ kwh: 1200, month: 11 }); eq('elec 1200 nov no super', ebn.isSuper, false); eq('elec 1200 nov total', ebn.total, 379630);
+eq('elec high 350 nov total', C.electricBill({ kwh: 350, month: 11, voltage: 'high' }).total, 60010);
+eq('elec 200 boundary tier', C.electricBill({ kwh: 200, month: 11 }).tier, 1); eq('elec 201 boundary tier', C.electricBill({ kwh: 201, month: 11 }).tier, 2);
+eq('appliance kwh', C.applianceKwh(1000, 4, 30), 120);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

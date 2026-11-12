@@ -657,6 +657,43 @@
       bestCase: (o.current * o.doneCredits + o.max * o.remCredits) / (o.doneCredits + o.remCredits) };
   }
 
+
+  // ---------- 주택용 전기요금 (누진제) ----------
+  // 한전 전기요금표 주택용(2023-11-09 시행, 2026-11 현재 그대로), 공급약관 별표7 기후환경요금 9.0원/kWh(2023-01-01),
+  // 연료비조정단가 +5원/kWh(2026년 4분기), 전기사업법 시행령 제36조 전력산업기반기금 1천분의 27.
+  const ELEC = {
+    low: { base: [910, 1600, 7300], rate: [120.0, 214.6, 307.3], superRate: 736.2 },
+    high: { base: [730, 1260, 6060], rate: [105.0, 174.0, 242.3], superRate: 593.3 },
+    summerTiers: [300, 450], otherTiers: [200, 400], superFrom: 1000,
+    superMonths: [7, 8, 12, 1, 2], climate: 9.0, fuel: 5.0, vat: 0.1, fundPermil: 27,
+  };
+  function electricBill(o) {
+    const t = ELEC[o.voltage === 'high' ? 'high' : 'low'];
+    const kwh = Math.max(0, Math.round(o.kwh)), month = o.month;
+    const tiers = month === 7 || month === 8 ? ELEC.summerTiers : ELEC.otherTiers;
+    const climate = o.climate == null ? ELEC.climate : o.climate, fuel = o.fuel == null ? ELEC.fuel : o.fuel;
+    const isSuper = ELEC.superMonths.includes(month) && kwh > ELEC.superFrom;
+    const tier = kwh <= tiers[0] ? 0 : kwh <= tiers[1] ? 1 : 2;
+    const t10 = (r) => Math.round(r * 10); // 0.1원 단위 정수로 계산해 소수 오차를 막음
+    const parts = [];
+    const seg = (from, to, r) => { const q = Math.max(0, Math.min(kwh, to) - from); if (q > 0) parts.push({ from, to: Math.min(kwh, to), kwh: q, rate: r, amount10: q * t10(r) }); };
+    seg(0, tiers[0], t.rate[0]); seg(tiers[0], tiers[1], t.rate[1]);
+    if (isSuper) { seg(tiers[1], ELEC.superFrom, t.rate[2]); seg(ELEC.superFrom, Infinity, t.superRate); }
+    else seg(tiers[1], Infinity, t.rate[2]);
+    const base = t.base[tier];
+    const energy10 = parts.reduce((a, x) => a + x.amount10, 0);
+    const climate10 = kwh * t10(climate), fuel10 = kwh * t10(fuel);
+    const subtotal = Math.floor((base * 10 + energy10 + climate10 + fuel10) / 10);
+    const vat = Math.round(subtotal * ELEC.vat);
+    const fund = Math.floor(subtotal * ELEC.fundPermil / 10000) * 10;
+    const total = Math.floor((subtotal + vat + fund) / 10) * 10;
+    return { kwh, tier: tier + 1, tiers, isSuper, base, energy: energy10 / 10, climate: climate10 / 10, fuel: fuel10 / 10,
+      parts: parts.map((x) => ({ from: x.from, to: x.to, kwh: x.kwh, rate: x.rate, amount: x.amount10 / 10 })),
+      subtotal, vat, fund, total, perKwh: kwh ? total / kwh : 0 };
+  }
+  // 가전 사용량: 소비전력(W) × 하루 사용 시간 × 일수 / 1000
+  const applianceKwh = (watt, hours, days) => watt * hours * days / 1000;
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -669,6 +706,7 @@
     SOCIAL, socialInsurance,
     YOUTH_LEAP, youthLeapContribution, youthLeap,
     GPA, gpa, gpaConvert, gpaTarget,
+    ELEC, electricBill, applianceKwh,
     comma, won, korean,
   };
 

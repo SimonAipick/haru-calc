@@ -1,0 +1,124 @@
+<!--
+{"slug": "electricity", "title": "전기요금 계산기 (주택용 누진제)", "category": "생활", "order": 9,
+ "short": "누진 구간·청구 예상액",
+ "description": "월 사용량(kWh)으로 주택용 전기요금을 계산합니다. 누진 3단계, 여름 완화 구간, 동·하계 1,000kWh 초과 요금, 기후환경요금·연료비조정요금·부가세·전력산업기반기금까지 반영하고, 전기장판·히터를 더 쓰면 요금이 얼마나 오르는지도 보여줍니다.",
+ "lead": "이번 달 사용량을 넣으면 누진 구간과 청구 예상액을, 난방 가전을 더 쓰면 늘어나는 요금을 보여줍니다."}
+-->
+<!-- 근거: 한전 사이버지점 한글 전기요금표 주택용(저압/고압), 2023-11-09 시행 (2026-11-12 확인)
+     https://cyber.kepco.co.kr/ckepco/front/jsp/CY/E/E/CYEEHP00101.jsp
+     기본공급약관 제67조(요금의 계산) https://cyber.kepco.co.kr/ckepco/front/jsp/CY/D/C/CYDCHP00108.jsp
+     별표7 기후환경요금 운영지침 부칙(2023-01-01부터 9.0원/kWh) https://cyber.kepco.co.kr/ckepco/front/jsp/CY/D/C/CYDCHP00408.jsp
+     전기사업법 시행령 제36조(부담금 = 전기요금의 1천분의 27, 2024-06-04 개정) https://www.law.go.kr/법령/전기사업법시행령
+     2026년 4분기 연료비조정단가 +5원/kWh 유지(2026-09-21 한전 발표 보도) https://biz.sbs.co.kr/amp/article/20000335912 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>공급 방식</legend>
+    <div class="seg">
+      <label><input type="radio" name="voltage" value="low" checked> 저압 (단독·다세대·대부분 가정)</label>
+      <label><input type="radio" name="voltage" value="high"> 고압 (아파트 단일계약 등)</label>
+    </div>
+  </fieldset>
+  <div class="grid2">
+    <label>한 달 사용량 (kWh)<input id="kwh" inputmode="numeric" placeholder="예: 350"></label>
+    <label>사용한 달<select id="month"></select></label>
+    <label>연료비조정단가 (원/kWh)<input id="fuel" inputmode="decimal" value="5"></label>
+  </div>
+  <fieldset>
+    <legend>가전을 더 쓰면? (선택)</legend>
+    <div class="grid2">
+      <label>소비전력 (W)<input id="watt" inputmode="numeric" placeholder="예: 전기장판 200, 히터 1500"></label>
+      <label>하루 사용 시간<input id="hours" inputmode="decimal" placeholder="예: 8"></label>
+      <label>사용 일수<input id="days" inputmode="numeric" value="30"></label>
+    </div>
+  </fieldset>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  const sel = UI.$('month'), m = new Date().getMonth() + 1;
+  for (let i = 1; i <= 12; i++) { const o = document.createElement('option'); o.value = i; o.textContent = i + '월' + (i === 7 || i === 8 ? ' (여름 완화)' : ''); sel.appendChild(o); }
+  sel.value = m;
+})();
+UI.bind('f', 'out', function () {
+  const kwh = UI.num('kwh'), month = +UI.val('month'), voltage = UI.val('voltage');
+  if (!kwh) return null;
+  const fuelRaw = UI.$('fuel').value.trim(), fuel = fuelRaw === '' ? 5 : Number(fuelRaw);
+  if (!isFinite(fuel) || fuel < -5 || fuel > 5) throw new Error('연료비조정단가는 -5 ~ +5원 사이로 넣어 주세요.');
+  if (kwh > 100000) throw new Error('사용량이 너무 큽니다. 한 달 kWh를 넣어 주세요.');
+  const r = Calc.electricBill({ kwh, month, voltage, fuel });
+  const rows = [['누진 구간', r.tier + '단계 (' + r.tiers[0] + 'kWh·' + r.tiers[1] + 'kWh 기준)'], ['기본요금', Calc.won(r.base)]];
+  r.parts.forEach((p) => rows.push(['전력량 ' + Calc.comma(p.from + 1) + '~' + Calc.comma(p.to) + 'kWh', Calc.comma(p.kwh) + 'kWh × ' + p.rate.toFixed(1) + '원 = ' + Calc.won(p.amount)]));
+  rows.push(['기후환경요금 (9.0원)', Calc.won(r.climate)], ['연료비조정요금 (' + fuel + '원)', Calc.won(r.fuel)],
+    ['전기요금계', Calc.won(r.subtotal)], ['부가가치세 (10%)', Calc.won(r.vat)], ['전력산업기반기금 (2.7%)', Calc.won(r.fund)],
+    ['1kWh당 평균', Calc.comma(Math.round(r.perKwh)) + '원']);
+  const notes = [];
+  const watt = UI.num('watt'), hours = Number(UI.$('hours').value) || 0, days = UI.num('days') || 0;
+  if (watt && hours && days) {
+    const add = Calc.applianceKwh(watt, hours, days), r2 = Calc.electricBill({ kwh: kwh + add, month, voltage, fuel });
+    rows.push(['가전 추가 사용량', Calc.comma(watt) + 'W × ' + hours + '시간 × ' + days + '일 = ' + Calc.comma(Math.round(add)) + 'kWh'],
+      ['추가 후 청구 예상액', Calc.won(r2.total) + ' (' + r2.tier + '단계)'], ['가전 때문에 늘어나는 요금', Calc.won(r2.total - r.total)]);
+    if (r2.tier > r.tier) notes.push('가전을 더 쓰면 ' + r.tier + '단계에서 ' + r2.tier + '단계로 올라가 기본요금과 kWh당 단가가 함께 오릅니다.');
+  }
+  if (r.tier > 1) {
+    const edge = r.tiers[r.tier - 2], down = Calc.electricBill({ kwh: edge, month, voltage, fuel });
+    notes.push(Calc.comma(r.kwh - edge) + 'kWh만 줄이면 ' + (r.tier - 1) + '단계(' + Calc.comma(edge) + 'kWh)로 내려가 ' + Calc.won(r.total - down.total) + ' 덜 냅니다.');
+  }
+  if (r.isSuper) notes.push((month === 7 || month === 8 ? '여름(7~8월)' : '겨울(12~2월)') + '에 1,000kWh를 넘은 부분은 슈퍼유저 요금(' + (voltage === 'high' ? '593.3' : '736.2') + '원/kWh)이 붙었습니다.');
+  notes.push('복지·대가족 할인, 함께 청구되는 TV수신료, 아파트 공용 전기는 빠져 있습니다.', '실제 고지서는 항목별 끝자리 처리 때문에 10원 안팎 차이가 날 수 있습니다.');
+  return UI.result(['청구 예상액', Calc.won(r.total)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>주택용 전기요금은 이렇게 계산합니다</h2>
+<p class="formula">청구액 = 전기요금계 + 부가가치세(10%) + 전력산업기반기금(2.7%)</p>
+<p class="formula">전기요금계 = 기본요금 + 전력량요금 + 기후환경요금 + 연료비조정요금</p>
+<p>한전 공급약관 제67조에 따라 전기요금은 네 가지 요금을 더해 만듭니다. 여기에 부가가치세 10%와 전력산업기반기금(전기사업법 시행령 제36조, 전기요금의 1천분의 27)이 붙어 고지됩니다.</p>
+
+<h2>누진 3단계 요금표 (저압)</h2>
+<p>한 달에 쓴 양이 많을수록 <strong>그 구간에 들어간 양만</strong> 비싼 단가로 계산합니다. 기본요금은 전체 사용량이 속한 구간 하나만 냅니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>구간</th><th>7~8월 (여름)</th><th>그 밖의 달</th><th>기본요금</th><th>전력량요금</th></tr></thead>
+  <tbody>
+    <tr><td>1단계</td><td>300kWh 이하</td><td>200kWh 이하</td><td>910원</td><td>120.0원/kWh</td></tr>
+    <tr><td>2단계</td><td>301~450kWh</td><td>201~400kWh</td><td>1,600원</td><td>214.6원/kWh</td></tr>
+    <tr><td>3단계</td><td>450kWh 초과</td><td>400kWh 초과</td><td>7,300원</td><td>307.3원/kWh</td></tr>
+  </tbody>
+</table>
+</div>
+<p>7~8월과 12~2월에 1,000kWh를 넘게 쓰면 넘은 부분은 <strong>736.2원/kWh</strong>(슈퍼유저 요금)입니다. 아파트처럼 고압으로 받는 집은 기본요금 730·1,260·6,060원, 단가 105.0·174.0·242.3원(슈퍼유저 593.3원)으로 조금 쌉니다. 2023년 11월 9일 시행 요금표가 2026년 11월 현재도 그대로입니다.</p>
+
+<h2>기후환경요금과 연료비조정요금</h2>
+<ul>
+  <li><strong>기후환경요금 9.0원/kWh:</strong> 신재생에너지 의무이행, 배출권 거래, 석탄발전 감축 비용입니다. 2023년 1월부터 같은 값입니다(공급약관 별표7).</li>
+  <li><strong>연료비조정요금:</strong> 석탄·LNG 등 연료비 변동을 분기마다 반영합니다. kWh당 ±5원 범위이고 2026년 4분기는 +5원입니다. 분기가 바뀌면 위 칸의 값을 바꿔 넣으세요.</li>
+</ul>
+
+<h2>예시: 11월에 350kWh를 썼다면</h2>
+<div class="table-wrap">
+<table>
+  <tbody>
+    <tr><td>기본요금 (2단계)</td><td>1,600원</td></tr>
+    <tr><td>전력량요금</td><td>200kWh × 120.0원 + 150kWh × 214.6원 = 56,190원</td></tr>
+    <tr><td>기후환경요금 + 연료비조정요금</td><td>350kWh × 9원 + 350kWh × 5원 = 4,900원</td></tr>
+    <tr><td>전기요금계</td><td>62,690원</td></tr>
+    <tr><td>부가세 + 전력기금</td><td>6,269원 + 1,690원</td></tr>
+    <tr><td><strong>청구 예상액</strong></td><td><strong>70,640원</strong></td></tr>
+  </tbody>
+</table>
+</div>
+<p>같은 350kWh라도 8월이면 여름 완화 구간 덕분에 59,980원입니다. 반대로 겨울에 400kWh를 넘기면 3단계로 올라가 기본요금이 1,600원에서 7,300원으로 뛰고, 넘은 부분은 kWh당 307.3원이 됩니다.</p>
+
+<h2>겨울 난방 가전, 한 달에 얼마나 늘까?</h2>
+<p class="formula">한 달 사용량(kWh) = 소비전력(W) × 하루 사용 시간 × 일수 ÷ 1,000</p>
+<p>제품 라벨의 소비전력을 넣으면 됩니다. 예를 들어 1,500W 전기히터를 하루 4시간, 30일 쓰면 180kWh가 늘어납니다. 원래 250kWh를 쓰던 집이라면 430kWh가 되어 3단계로 올라가므로, 늘어난 요금은 단순히 180kWh × 평균 단가보다 훨씬 큽니다. 온도 조절기가 있는 제품은 실제로 계속 최대 전력을 쓰지 않아 계산보다 적게 나올 수 있습니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>내 집이 저압인지 고압인지 어떻게 알아요?</h3>
+<p>고지서의 계약종별에 '주택용 저압' 또는 '주택용 고압'으로 적혀 있습니다. 단독주택·빌라·원룸은 대부분 저압이고, 아파트는 단지 전체가 고압으로 받는 경우가 많습니다. 아파트는 관리비 고지서에 공용 전기료가 따로 붙습니다.</p>
+<h3>고지서 금액과 조금 달라요.</h3>
+<p>복지·대가족·출산가구 할인, 함께 청구되는 TV수신료, 검침일 사이에 요금이 바뀐 경우의 일할 계산, 항목별 끝자리 처리 때문입니다. 한전ON의 요금 계산기에서 정확한 금액을 확인할 수 있습니다.</p>
+<h3>사용량은 어디서 보나요?</h3>
+<p>고지서의 '당월 사용량', 한전ON 앱의 요금 조회, 계량기 지침의 이번 달 값에서 지난달 값을 뺀 수로 확인합니다.</p>
+<h3>누진 구간을 넘지 않으려면?</h3>
+<p>결과 아래에 바로 아래 단계까지 얼마나 줄이면 되는지 나옵니다. 검침일 기준으로 한 달이 계산되므로, 고지서의 검침일을 알아 두고 난방 가전 사용을 나눠 쓰면 구간을 넘지 않는 데 도움이 됩니다.</p>
