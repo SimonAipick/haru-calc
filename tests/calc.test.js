@@ -266,6 +266,26 @@ eq('elec high 350 nov total', C.electricBill({ kwh: 350, month: 11, voltage: 'hi
 eq('elec 200 boundary tier', C.electricBill({ kwh: 200, month: 11 }).tier, 1); eq('elec 201 boundary tier', C.electricBill({ kwh: 201, month: 11 }).tier, 2);
 eq('appliance kwh', C.applianceKwh(1000, 4, 30), 120);
 
+// 종합부동산세 (주택분, 개인) — 손계산
+var j1 = C.jongbu({ prices: [2000000000], oneHouse: true, age: 50, years: 3 });
+eq('jb one base', j1.base, 480000000); eq('jb one calc', j1.calc, 2760000); eq('jb one prop', j1.houses[0].tax, 2970000);
+eq('jb one propCredit', j1.propCredit, 864000); eq('jb one tax', j1.tax, 1896000); eq('jb one nong', j1.nong, 379200); eq('jb one pay', j1.pay, 2275200);
+var j2 = C.jongbu({ prices: [2000000000], oneHouse: true, age: 66, years: 12 });
+eq('jb credit 70%', j2.creditRate, 0.7, 1e-9); eq('jb credit tax', j2.tax, 568800); eq('jb credit nong', j2.nong, 113760);
+var j3 = C.jongbu({ prices: [2000000000], oneHouse: true, age: 72, years: 16 });
+eq('jb credit cap 80%', j3.creditRate, 0.8, 1e-9); eq('jb cap tax', j3.tax, 379200);
+var j4 = C.jongbu({ prices: [1000000000, 800000000], oneHouse: true, age: 70, years: 20 });
+eq('jb two not one', j4.one, false); eq('jb two base', j4.base, 540000000); eq('jb two calc', j4.calc, 3180000);
+eq('jb two propTotal', j4.propTotal, 3060000); eq('jb two propCredit', j4.propCredit, 1296000); eq('jb two tax', j4.tax, 1884000); eq('jb two pay', j4.pay, 2260800);
+var j5 = C.jongbu({ prices: [1500000000, 1200000000, 1000000000] });
+eq('jb three heavy', j5.heavy, true); eq('jb three base', j5.base, 1680000000); eq('jb three calc', j5.calc, 19200000);
+eq('jb three normal calc', j5.normalCalc, 15840000); eq('jb three tax', j5.tax, 15168000); eq('jb three nong', j5.nong, 3033600);
+eq('jb below line', C.jongbu({ prices: [1100000000], oneHouse: true }).tax, 0);
+var j6 = C.jongbu({ prices: [1000000000, 800000000], prevTotal: 3000000 });
+eq('jb burden cap tax', j6.tax, 1440000); eq('jb burden cap cut', j6.capCut, 444000);
+eq('jb prop 5억 다주택', C.housePropertyTax(500000000, false).tax, 570000);
+eq('jb prop 5억 1주택', C.housePropertyTax(500000000, true).tax, 0.0005 * 6e7 + 0.001 * 9e7 + 0.002 * 7e7);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

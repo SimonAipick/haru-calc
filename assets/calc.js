@@ -694,6 +694,70 @@
   // 가전 사용량: 소비전력(W) × 하루 사용 시간 × 일수 / 1000
   const applianceKwh = (watt, hours, days) => watt * hours * days / 1000;
 
+  // ---------- 종합부동산세 (주택분, 개인) ----------
+  // 종합부동산세법 제8조·제9조·제10조(법률 제21224호, 시행 2026. 1. 1.), 시행령 제2조의4(공정시장가액비율 60%)·제4조의3·제5조
+  // (대통령령 제36739호, 시행 2026. 10. 1.), 지방세법 제111조①3·제111조의2, 시행령 제109조①2(2026년 1세대1주택 43/44/45%),
+  // 농어촌특별세법 제5조①8(20%), 국고금 관리법 제47조(10원 미만 버림). 공제 재산세 분자의 0.4%는 시행규칙 별지 서식 작성방법.
+  const JONGBU = {
+    deduction: { one: 1200000000, other: 900000000 }, fmv: 0.6,
+    brackets: [[3e8, 0.005], [6e8, 0.007], [12e8, 0.01], [25e8, 0.013], [50e8, 0.015], [94e8, 0.02], [Infinity, 0.027]],
+    heavy: [[3e8, 0.005], [6e8, 0.007], [12e8, 0.01], [25e8, 0.02], [50e8, 0.03], [94e8, 0.04], [Infinity, 0.05]],
+    age: [[70, 0.4], [65, 0.3], [60, 0.2]], hold: [[15, 0.5], [10, 0.4], [5, 0.2]], creditCap: 0.8,
+    propRate: 0.004, nongteuk: 0.2, burdenCap: 1.5, installmentOver: 2500000,
+  };
+  const PROP_TAX = {
+    std: [[6e7, 0.001], [1.5e8, 0.0015], [3e8, 0.0025], [Infinity, 0.004]],
+    special: [[6e7, 0.0005], [1.5e8, 0.001], [3e8, 0.002], [Infinity, 0.0035]],
+    fmv: 0.6, oneFmv: [[3e8, 0.43], [6e8, 0.44], [Infinity, 0.45]], specialMax: 9e8,
+  };
+  function progressiveTax(x, br) {
+    let tax = 0, prev = 0;
+    for (const [top, r] of br) { if (x > prev) tax += (Math.min(x, top) - prev) * r; prev = top; }
+    return tax;
+  }
+  const floor10 = (x) => Math.floor(x / 10 + 1e-9) * 10;
+  const firstAtLeast = (tbl, v) => { for (const [min, r] of tbl) if (v >= min) return r; return 0; };
+  // 주택 한 채의 재산세 본세(도시지역분·지방교육세 제외, 표준세율, 과세표준상한·세부담상한 미반영)
+  function housePropertyTax(price, oneHouse) {
+    const fmv = oneHouse ? PROP_TAX.oneFmv.find(([top]) => price <= top)[1] : PROP_TAX.fmv;
+    const base = Math.floor(price * fmv);
+    const special = !!oneHouse && price <= PROP_TAX.specialMax;
+    return { price, fmv, base, special, tax: progressiveTax(base, special ? PROP_TAX.special : PROP_TAX.std),
+      stdTax: progressiveTax(base, PROP_TAX.std) };
+  }
+  // o: { prices: [공시가격…], oneHouse, age, years, prevTotal(직전 연도 재산세+종부세 상당액, 선택) }
+  function jongbu(o) {
+    const prices = (o.prices || []).filter((p) => p > 0);
+    const n = prices.length;
+    if (!n) throw new Error('공시가격을 입력하세요.');
+    const one = !!o.oneHouse && n === 1;
+    const total = prices.reduce((a, b) => a + b, 0);
+    const deduction = one ? JONGBU.deduction.one : JONGBU.deduction.other;
+    const base = Math.floor(Math.max(0, total - deduction) * JONGBU.fmv);
+    const heavy = n >= 3;
+    const calc = progressiveTax(base, heavy ? JONGBU.heavy : JONGBU.brackets);
+    const houses = prices.map((p) => housePropertyTax(p, one));
+    const propTotal = houses.reduce((a, h) => a + h.tax, 0);
+    const propStd = houses.reduce((a, h) => a + h.stdTax, 0);
+    const numer = base * (one ? houses[0].fmv : PROP_TAX.fmv) * JONGBU.propRate;
+    const propCredit = propStd > 0 ? Math.min(propTotal, propTotal * numer / propStd) : 0;
+    const afterProp = Math.max(0, calc - propCredit);
+    const ageRate = one ? firstAtLeast(JONGBU.age, o.age || 0) : 0;
+    const holdRate = one ? firstAtLeast(JONGBU.hold, o.years || 0) : 0;
+    const creditRate = Math.min(JONGBU.creditCap, ageRate + holdRate);
+    const credit = afterProp * creditRate;
+    let tax = afterProp - credit, capCut = 0;
+    if (o.prevTotal > 0 && base > 0) {
+      const limit = Math.max(0, o.prevTotal * JONGBU.burdenCap - propTotal);
+      if (tax > limit) { capCut = tax - limit; tax = limit; }
+    }
+    tax = floor10(tax);
+    const nong = floor10(tax * JONGBU.nongteuk);
+    return { n, one, total, deduction, base, heavy, calc, houses, propTotal, propCredit, afterProp,
+      ageRate, holdRate, creditRate, credit, capCut, tax, nong, pay: tax + nong,
+      installment: tax > JONGBU.installmentOver, normalCalc: progressiveTax(base, JONGBU.brackets) };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -707,6 +771,7 @@
     YOUTH_LEAP, youthLeapContribution, youthLeap,
     GPA, gpa, gpaConvert, gpaTarget,
     ELEC, electricBill, applianceKwh,
+    JONGBU, PROP_TAX, progressiveTax, housePropertyTax, jongbu,
     comma, won, korean,
   };
 
