@@ -286,6 +286,18 @@ eq('jb burden cap tax', j6.tax, 1440000); eq('jb burden cap cut', j6.capCut, 444
 eq('jb prop 5억 다주택', C.housePropertyTax(500000000, false).tax, 570000);
 eq('jb prop 5억 1주택', C.housePropertyTax(500000000, true).tax, 0.0005 * 6e7 + 0.001 * 9e7 + 0.002 * 7e7);
 
+// 고향사랑기부금 — 손계산 (고향사랑e음 예시: 10만원 → 소득세 90,909원 + 지방소득세 9,090원)
+var h1 = C.hometownCredit({ amount: 100000 }); eq('ht 10만 national', h1.national, 90909); eq('ht 10만 local', h1.local, 9090);
+eq('ht 10만 credit', h1.credit, 99999); eq('ht 10만 gift', h1.gift, 30000); eq('ht 10만 net', h1.net, -29999);
+var h2 = C.hometownCredit({ amount: 200000 }); eq('ht 20만 national', h2.national, 130909); eq('ht 20만 credit', h2.credit, 143999);
+var h3 = C.hometownCredit({ amount: 500000 }); eq('ht 50만 national', h3.national, 175909); eq('ht 50만 local', h3.local, 17590); eq('ht 50만 credit', h3.credit, 193499);
+var h4 = C.hometownCredit({ amount: 1000000, disaster: true }); eq('ht disaster 100만 national', h4.national, 370909); eq('ht disaster 100만 credit', h4.credit, 407999);
+var h5 = C.hometownCredit({ amount: 25000000 }); eq('ht over cap used', h5.used, 20000000); eq('ht over', h5.over, 5000000);
+eq('ht 2000만 national', h5.national, 3100909); eq('ht 2000만 credit', h5.credit, 3410999); eq('ht 2000만 gift', h5.gift, 6000000);
+var h6 = C.hometownCredit({ amount: 300000, taxCap: 50000 }); eq('ht taxcap capped', h6.capped, true); eq('ht taxcap national', h6.national, 50000); eq('ht taxcap credit', h6.credit, 55000);
+var h7 = C.hometownCredit({ amount: 50000 }); eq('ht 5만 national', h7.national, 45454); eq('ht 5만 credit', h7.credit, 49999);
+eq('ht 0', C.hometownCredit({ amount: 0 }).credit, 0);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

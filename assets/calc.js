@@ -758,6 +758,30 @@
       installment: tax > JONGBU.installmentOver, normalCalc: progressiveTax(base, JONGBU.brackets) };
   }
 
+  // ---------- 고향사랑기부금 세액공제 ----------
+  // 고향사랑e음 안내(ilovegohyang.go.kr/donation/guide1.html, guide3.html, 2026-11-14 확인), 행안부 보도자료 2025-12-16
+  // (korea.kr newsId 148956582), 정책브리핑 2026-08-13(148969870: 현행 40%(지방세 포함 44%), 15%(16.5%)).
+  // 소득세: 10만원 이하 110분의 100, 10만 초과 20만 이하 40%(2026년 기부분부터), 20만 초과 15%(특별재난지역 선포 후 3개월 내 30%).
+  // 개인지방소득세는 소득세 공제액의 10%만큼 함께 줄어듦. 연간 2,000만원, 답례품(기부 포인트) 기부액의 30% 이내. 이월공제 없음.
+  const HOMETOWN = { maxYear: 20000000, t1: 100000, t2: 200000, r1: 100 / 110, r2: 0.4, r3: 0.15, r3Disaster: 0.3,
+    localRate: 0.1, giftRate: 0.3 };
+  // o: { amount: 올해 기부 합계, disaster: 20만 초과분이 특별재난지역 기부인지, taxCap: 공제 전 결정세액(선택, 0이면 무시) }
+  function hometownCredit(o) {
+    const H = HOMETOWN;
+    const amount = Math.max(0, o.amount || 0);
+    const a = Math.min(amount, H.maxYear);
+    const p1 = Math.min(a, H.t1), p2 = Math.max(0, Math.min(a, H.t2) - H.t1), p3 = Math.max(0, a - H.t2);
+    const r3 = o.disaster ? H.r3Disaster : H.r3;
+    const full = Math.floor(p1 * H.r1 + p2 * H.r2 + p3 * r3 + 1e-6);
+    const capped = o.taxCap > 0 && full > o.taxCap;
+    const national = capped ? Math.floor(o.taxCap) : full;
+    const local = Math.floor(national * H.localRate + 1e-6);
+    const credit = national + local;
+    const gift = Math.floor(a * H.giftRate);
+    return { amount, used: a, over: amount - a, p1, p2, p3, r3, full, capped, national, local, credit, gift,
+      cost: a - credit, net: a - credit - gift, rate: a ? credit / a : 0 };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -772,6 +796,7 @@
     GPA, gpa, gpaConvert, gpaTarget,
     ELEC, electricBill, applianceKwh,
     JONGBU, PROP_TAX, progressiveTax, housePropertyTax, jongbu,
+    HOMETOWN, hometownCredit,
     comma, won, korean,
   };
 
