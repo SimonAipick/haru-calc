@@ -1,0 +1,145 @@
+<!--
+{"slug": "card-deduction", "title": "신용카드 소득공제 계산기", "category": "직장·급여", "order": 11,
+ "short": "연말 카드 사용 전략·남은 한도",
+ "description": "지금까지 쓴 신용카드·체크카드·현금영수증·전통시장·대중교통 사용액을 넣으면 2026년 카드 소득공제 금액, 총급여 25% 문턱까지 남은 금액, 한도를 채우려면 체크카드로 얼마를 더 써야 하는지, 남은 기간 신용카드와 체크카드 중 무엇이 유리한지 계산합니다.",
+ "lead": "12월 31일까지 쓴 금액이 올해 공제에 들어갑니다. 남은 한 달 반, 어떤 카드로 얼마를 쓰면 좋을지 지금 확인하세요."}
+-->
+<!-- 근거 (2026-11-15 law.go.kr 원문 확인):
+     조세특례제한법 제126조의2 ①②⑩⑪ (법률 제21467호, 시행 2026. 9. 18. 판, 한도 조항 2025-12-23 개정)
+       https://www.law.go.kr/법령/조세특례제한법/제126조의2
+       최저사용금액 총급여 25%, 신용 15%·직불/현금영수증 30%·문화체육 30%(총급여 7천만원 이하)·전통시장 40%·대중교통 40%,
+       최저사용금액은 신용카드 → 직불·문화 → 전통시장·대중교통 순으로 채움(②6호),
+       시행령 제121조의2 ③(가족 사용액: 배우자·생계 같이 하는 직계존비속, 소득금액 100만원 이하)·⑥(제외 항목) https://www.law.go.kr/법령/조세특례제한법시행령/제121조의2
+       기본 한도 300만/250만, 자녀등 1명 350만/275만, 2명 이상 400만/300만(⑩), 추가 한도 전통시장·대중교통(·문화체육) 300만/200만(⑪)
+     계산 함수는 연말정산 계산기와 같은 Calc.cardDeduction을 씀 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>나에 대해</legend>
+    <div class="grid2">
+      <label>총급여 <small>연봉에서 식대 등 비과세를 뺀 금액</small><input class="money" id="gross" inputmode="numeric" placeholder="예: 50,000,000"></label>
+      <label>기본공제 받는 20세 이하 자녀 수 <small>공제 한도가 늘어납니다</small><input type="number" id="kids" inputmode="numeric" min="0" max="10" value="0"></label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>1월부터 지금까지 쓴 금액 <small>카드사 앱·홈택스 '신용카드 사용액'에서 확인</small></legend>
+    <div class="grid2">
+      <label>신용카드<input class="money" id="credit" inputmode="numeric" placeholder="아래 항목에 넣은 금액은 빼고"></label>
+      <label>체크카드·현금영수증<input class="money" id="debit" inputmode="numeric" placeholder="아래 항목에 넣은 금액은 빼고"></label>
+    </div>
+    <div class="grid2">
+      <label>전통시장<input class="money" id="market" inputmode="numeric" placeholder="결제수단 상관없이"></label>
+      <label>대중교통<input class="money" id="transit" inputmode="numeric" placeholder="결제수단 상관없이"></label>
+    </div>
+    <label>도서·신문·공연·박물관·미술관·영화·수영장 등 체육시설 <small>총급여 7천만원 이하만 30%</small><input class="money" id="culture" inputmode="numeric"></label>
+  </fieldset>
+  <fieldset>
+    <legend>12월 31일까지 더 쓸 예정인 금액</legend>
+    <div class="grid2">
+      <label>예정 사용액 <small>선택, 신용과 체크 비교용</small><input class="money" id="plan" inputmode="numeric" placeholder="예: 2,000,000"></label>
+      <label>내 세율 (과세표준 구간) <small>작년 원천징수영수증 과세표준으로 확인</small>
+        <select id="rate">
+          <option value="0.06">6% (1,400만원 이하)</option>
+          <option value="0.15" selected>15% (1,400만~5,000만원)</option>
+          <option value="0.24">24% (5,000만~8,800만원)</option>
+          <option value="0.35">35% (8,800만~1억 5천만원)</option>
+          <option value="0.38">38% (1억 5천만~3억원)</option>
+          <option value="0.4">40% (3억~5억원)</option>
+          <option value="0.42">42% (5억~10억원)</option>
+          <option value="0.45">45% (10억원 초과)</option>
+        </select></label>
+    </div>
+  </fieldset>
+  <button type="submit">카드 공제 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const gross = UI.num('gross');
+  if (!gross) return null;
+  const rate = parseFloat(document.getElementById('rate').value);
+  const r = Calc.cardPlan({ gross, kids: UI.num('kids'), credit: UI.num('credit'), debit: UI.num('debit'), market: UI.num('market'),
+    transit: UI.num('transit'), culture: UI.num('culture'), plan: UI.num('plan') });
+  const n = r.now, man = (v) => Calc.won(Math.ceil(v / 10000) * 10000);
+  const rows = [
+    ['지금까지 쓴 금액', Calc.won(n.used)],
+    ['최저사용금액 (총급여 25%)', Calc.won(n.min) + (r.toMin > 0 ? ' — ' + Calc.won(r.toMin) + ' 더 써야 넘음' : ' — 넘었음')],
+    ['공제 대상 금액', Calc.won(n.amount)],
+    ['기본 한도', Calc.won(n.limit)],
+  ];
+  if (n.extra > 0) rows.push(['전통시장·대중교통' + (gross <= 7e7 ? '·문화체육' : '') + ' 추가 공제', Calc.won(n.extra)]);
+  rows.push(['지금 카드 공제', Calc.won(n.deduction)],
+    ['줄어드는 세금 (어림)', Calc.won(Calc.deductionSaving(n.deduction, rate))]);
+  if (r.room > 0) rows.push(['기본 한도까지 남은 공제', Calc.won(r.room)],
+    ['한도를 채우려면 체크카드·현금영수증으로', man(r.needDebit) + ' 더'],
+    ['신용카드로만 채우려면', man(r.needCredit) + ' 더']);
+  if (r.plan > 0) {
+    const dc = r.ifCredit.deduction - n.deduction, dd = r.ifDebit.deduction - n.deduction;
+    rows.push(['남은 ' + Calc.won(r.plan) + '을 신용카드로', '공제 +' + Calc.won(dc) + ', 세금 ' + Calc.won(Calc.deductionSaving(dc, rate)) + ' ↓'],
+      ['남은 ' + Calc.won(r.plan) + '을 체크카드로', '공제 +' + Calc.won(dd) + ', 세금 ' + Calc.won(Calc.deductionSaving(dd, rate)) + ' ↓']);
+  }
+  const notes = [];
+  if (r.toMin > 0) notes.push('아직 총급여의 25%를 넘지 않아 공제가 없습니다. 이 문턱까지는 어떤 카드로 써도 공제가 늘지 않으니, 혜택(포인트·할인)이 큰 신용카드를 쓰고 문턱을 넘은 뒤부터 체크카드를 쓰는 것이 유리합니다.');
+  else if (r.room > 0) notes.push('문턱을 넘었으니 이제부터는 체크카드·현금영수증(30%)이 신용카드(15%)보다 공제가 두 배입니다. 신용카드 혜택이 사용액의 ' + (rate * 1.1 * 15).toFixed(1) + '%보다 크지 않다면 체크카드가 낫습니다.');
+  else notes.push('이미 기본 한도를 채웠습니다. 더 써도 전통시장·대중교통' + (gross <= 7e7 ? '·문화체육' : '') + ' 추가 한도 안에서만 늘어나니, 공제를 위해 지출을 늘릴 필요는 없습니다.');
+  if (r.plan > 0 && r.toMin > 0 && r.plan <= r.toMin) notes.push('예정 사용액이 문턱까지 모자란 금액보다 적어서, 신용과 체크 어느 쪽으로 써도 올해 공제는 생기지 않습니다.');
+  if (gross > 7e7 && UI.num('culture') > 0) notes.push('총급여 7천만원 초과자는 도서·공연·체육시설 사용분에 30%가 따로 적용되지 않아 신용카드 사용분(15%)으로 계산했습니다. 체크카드로 냈다면 그 금액은 체크카드 칸에 넣으세요.');
+  notes.push('줄어드는 세금은 소득공제 금액 × 세율 × 1.1(지방소득세 포함)로 어림한 값입니다. 공제로 세율 구간이 바뀌거나 결정세액이 0이 되면 실제 효과는 더 작습니다.');
+  return UI.result(['올해 카드 소득공제 (지금까지 기준)', Calc.won(n.deduction)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>카드 소득공제는 이렇게 계산합니다</h2>
+<p>1년 동안 신용카드·체크카드·현금영수증으로 쓴 금액이 <strong>총급여의 25%</strong>(최저사용금액)를 넘으면, 넘는 부분에 결제수단별 공제율을 곱해 근로소득에서 빼 줍니다. 25%까지는 공제가 없고, 이 25%는 공제율이 가장 낮은 신용카드 사용액부터 채운 것으로 봅니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>사용처·결제수단</th><th>공제율</th></tr></thead>
+  <tbody>
+    <tr><td>신용카드</td><td>15%</td></tr>
+    <tr><td>체크카드·직불카드·현금영수증·제로페이</td><td>30%</td></tr>
+    <tr><td>도서·신문·공연·박물관·미술관·영화관·수영장 등 체육시설 (총급여 7천만원 이하)</td><td>30%</td></tr>
+    <tr><td>전통시장</td><td>40%</td></tr>
+    <tr><td>대중교통</td><td>40%</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="formula">카드 공제 = 사용처별 금액 × 공제율 합계 − 최저사용금액(신용카드분부터) × 해당 공제율</p>
+
+<h2>공제 한도 (2026년 사용분)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>총급여</th><th>기본 한도</th><th>자녀 1명</th><th>자녀 2명 이상</th><th>추가 한도</th></tr></thead>
+  <tbody>
+    <tr><td>7천만원 이하</td><td>300만원</td><td>350만원</td><td>400만원</td><td>전통시장·대중교통·문화체육 합쳐 300만원</td></tr>
+    <tr><td>7천만원 초과</td><td>250만원</td><td>275만원</td><td>300만원</td><td>전통시장·대중교통 합쳐 200만원</td></tr>
+  </tbody>
+</table>
+</div>
+<p>자녀 한도는 기본공제를 받는 자녀·손자녀 등을 기준으로 하며 2026년 사용분부터 적용됩니다. 기본 한도를 넘었을 때만 전통시장·대중교통 등 사용분에서 추가 한도만큼 더 공제합니다.</p>
+
+<h2>예시: 총급여 6천만원, 11월 중순까지 신용카드 1,000만원·체크카드 200만원</h2>
+<p>최저사용금액은 6천만원 × 25% = 1,500만원입니다. 지금까지 1,200만원을 써서 300만원이 모자라고, 카드 공제는 0원입니다.</p>
+<ul>
+  <li>남은 기간 <strong>1,000만원을 체크카드</strong>로 쓰면: 신용 1,000만원 × 15% + 체크 1,200만원 × 30% − (신용 1,000만원 × 15% + 문턱 남은 500만원 × 30%) = <strong>210만원</strong> 공제</li>
+  <li>같은 1,000만원을 <strong>신용카드</strong>로 쓰면: 신용 2,000만원 × 15% + 체크 200만원 × 30% − 1,500만원 × 15% = <strong>135만원</strong> 공제</li>
+</ul>
+<p>공제 차이 75만원은 세율 15% 구간이면 세금으로 약 12만 4천원(지방소득세 포함) 차이입니다. 반대로 남은 사용액이 500만원뿐이면 어느 카드로 써도 공제는 60만원으로 같습니다. 문턱 근처에서는 결제수단보다 <strong>문턱을 넘느냐</strong>가 먼저입니다.</p>
+
+<h2>연말 카드 사용 요령</h2>
+<ul>
+  <li><strong>25%를 넘기 전:</strong> 공제가 없는 구간이라 포인트·할인 혜택이 큰 카드를 쓰는 것이 낫습니다.</li>
+  <li><strong>25%를 넘은 뒤:</strong> 체크카드·현금영수증이 신용카드보다 공제율이 두 배입니다. 신용카드 혜택률이 크지 않다면 체크카드로 바꾸세요.</li>
+  <li><strong>한도를 채운 뒤:</strong> 전통시장·대중교통 사용분만 추가 한도 안에서 더 공제됩니다. 공제를 위해 지출을 늘리는 것은 손해입니다.</li>
+  <li><strong>맞벌이:</strong> 카드 공제는 카드 명의자 본인만 받습니다. 대개 25% 문턱이 낮은(급여가 적은) 쪽으로 사용액을 모으면 공제가 커지지만, 그 사람의 세율이 낮으면 줄어드는 세금도 작으니 두 경우를 모두 계산해 보세요.</li>
+</ul>
+
+<h2>자주 묻는 질문</h2>
+<h3>공제에서 빠지는 사용액이 있나요?</h3>
+<p>있습니다. 해외에서 쓴 금액, 자동차 구입비(중고차는 일부 인정), 사업 관련 비용, 실제 거래 없이 꾸민 결제는 들어가지 않습니다. 시행령에서 빼는 항목도 많습니다. 4대보험료·보장성 보험료, 학교 수업료·어린이집 보육비, 국세·지방세, 전기·수도·가스·통신료, 아파트관리비, 도로통행료, 상품권 구입비, 리스·렌터카 요금, 대출이자 등 금융 수수료, 면세점 구입비, 세액공제를 받은 월세·정치자금·고향사랑기부금이 그렇습니다. 정확한 공제 대상 금액은 홈택스 간소화 자료로 확인하세요.</p>
+<h3>가족 카드 사용액도 합칠 수 있나요?</h3>
+<p>배우자와 생계를 같이 하는 직계존비속(부모님, 배우자 부모님, 자녀 등)의 사용액은 본인 공제에 합칠 수 있습니다. 단, 그 가족의 연간 소득금액이 100만원 이하(근로소득만 있으면 총급여 500만원 이하)여야 하고, 다른 사람이 기본공제를 받은 가족은 안 됩니다. 나이 제한은 없지만 형제자매 사용액은 합칠 수 없습니다.</p>
+<h3>지금까지 쓴 금액은 어디서 보나요?</h3>
+<p>카드사 앱이나 홈페이지의 소득공제용 사용금액 조회 메뉴, 홈택스·손택스의 연말정산 미리보기에서 확인할 수 있습니다. 확인한 금액을 이 계산기에 넣고 남은 기간 계획을 세워 보세요.</p>
+<h3>내 세율은 어떻게 아나요?</h3>
+<p>작년 근로소득 원천징수영수증의 '과세표준' 금액이 어느 구간에 있는지 보면 됩니다. 연봉과 과세표준은 다르니, 정확한 세금 효과는 <a href="../year-end-tax/">연말정산 환급 계산기</a>에 카드 공제를 넣어 확인하세요.</p>
+<h3>2027년에도 같은가요?</h3>
+<p>카드 소득공제는 2028년 12월 31일 사용분까지 적용되도록 되어 있습니다. 공제율과 한도는 매년 세법 개정으로 바뀔 수 있어, 바뀌면 이 계산기도 고치겠습니다.</p>

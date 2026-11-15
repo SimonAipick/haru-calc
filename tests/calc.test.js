@@ -298,6 +298,27 @@ var h6 = C.hometownCredit({ amount: 300000, taxCap: 50000 }); eq('ht taxcap capp
 var h7 = C.hometownCredit({ amount: 50000 }); eq('ht 5만 national', h7.national, 45454); eq('ht 5만 credit', h7.credit, 49999);
 eq('ht 0', C.hometownCredit({ amount: 0 }).credit, 0);
 
+// 카드 공제 연말 계획 — 손계산 (조특법 제126조의2)
+// A: 총급여 4천만, 신용 1,500만 → 최저 1,000만, 공제 (1500−1000)×15% = 75만, 한도 300만까지 225만 남음
+var cpA = C.cardPlan({ gross: 4e7, credit: 1.5e7 });
+eq('cp A now', cpA.now.deduction, 750000); eq('cp A room', cpA.room, 2250000); eq('cp A toMin', cpA.toMin, 0);
+eq('cp A needDebit', cpA.needDebit, 7500000, 1); eq('cp A needCredit', cpA.needCredit, 15000000, 1);
+// B: 총급여 6천만, 신용 1,000만·체크 200만 → 최저 1,500만에 300만 모자람, 공제 0
+var cpB = C.cardPlan({ gross: 6e7, credit: 1e7, debit: 2e6, plan: 1e7 });
+eq('cp B now', cpB.now.deduction, 0); eq('cp B toMin', cpB.toMin, 3000000);
+eq('cp B needDebit', cpB.needDebit, 13000000, 1); eq('cp B needCredit', cpB.needCredit, 21000000, 1);
+// 남은 1,000만원: 체크면 0.3×1000만 − 90만 = 210만, 신용이면 0.15×1000만 − 15만 = 135만
+eq('cp B ifDebit', cpB.ifDebit.deduction, 2100000); eq('cp B ifCredit', cpB.ifCredit.deduction, 1350000);
+var cpB5 = C.cardPlan({ gross: 6e7, credit: 1e7, debit: 2e6, plan: 5e6 });
+eq('cp B 500 same', cpB5.ifDebit.deduction - cpB5.ifCredit.deduction, 0);
+// C: 이미 한도 초과(총급여 8천만, 자녀 2, 신용 5천만, 전통시장 300만) → 420만, 더 쓸 필요 없음
+var cpC = C.cardPlan({ gross: 8e7, kids: 2, credit: 5e7, market: 3e6 });
+eq('cp C now', cpC.now.deduction, 4200000); eq('cp C room', cpC.room, 0); eq('cp C needDebit', cpC.needDebit, 0);
+// D: 총급여 3천만, 체크 900만·대중교통 100만 → 최저 750만, 270+40−225 = 85만
+var cpD = C.cardPlan({ gross: 3e7, debit: 9e6, transit: 1e6 });
+eq('cp D now', cpD.now.deduction, 850000); eq('cp D needDebit', cpD.needDebit, 7166667, 1);
+eq('saving 15%', C.deductionSaving(1000000, 0.15), 165000); eq('saving 24%', C.deductionSaving(750000, 0.24), 198000);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

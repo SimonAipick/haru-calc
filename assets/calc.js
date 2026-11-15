@@ -196,6 +196,31 @@
     return { min, used: o.credit + debit + market + transit + (o.culture || 0), gross, amount, limit, extra,
       deduction: Math.min(amount, limit) + extra };
   }
+  // 카드 공제 연말 계획 (조특법 제126조의2 ②⑩⑪, 2026-11-15 law.go.kr 원문 재확인)
+  // o: gross, kids, credit, debit, market, transit, culture(지금까지 사용액), plan(남은 기간 쓸 예정 금액)
+  // fill(key): 그 결제수단만 더 쓸 때 기본 한도를 다 채우는 데 필요한 최소 추가 사용액(원)
+  function cardPlan(o) {
+    const base = { gross: o.gross, kids: o.kids || 0, credit: o.credit || 0, debit: o.debit || 0,
+      market: o.market || 0, transit: o.transit || 0, culture: o.culture || 0 };
+    const now = cardDeduction(base);
+    const capped = (r) => Math.min(r.amount, r.limit);
+    const fill = (key) => {
+      if (now.amount >= now.limit) return 0;
+      const amt = (x) => cardDeduction(Object.assign({}, base, { [key]: base[key] + x })).amount;
+      let lo = 0, hi = 1;
+      while (amt(hi) < now.limit && hi < 1e11) hi *= 2;
+      if (amt(hi) < now.limit) return Infinity;
+      while (hi - lo > 1) { const m = Math.floor((lo + hi) / 2); if (amt(m) >= now.limit) hi = m; else lo = m; }
+      return hi;
+    };
+    const plan = Math.max(0, o.plan || 0);
+    const ifCredit = cardDeduction(Object.assign({}, base, { credit: base.credit + plan }));
+    const ifDebit = cardDeduction(Object.assign({}, base, { debit: base.debit + plan }));
+    return { now, toMin: Math.max(0, now.min - now.used), room: Math.max(0, now.limit - capped(now)),
+      needDebit: fill('debit'), needCredit: fill('credit'), plan, ifCredit, ifDebit };
+  }
+  // 소득공제 금액이 줄여 주는 세금 (한계세율 × 1.1, 지방소득세 포함). 구간이 바뀌는 경우는 무시한 어림값
+  function deductionSaving(d, rate) { return Math.round(Math.max(0, d) * rate * 1.1); }
   // 의료비: 일반(700만원 한도) + 본인·65세 이상·6세 이하·장애인 등(한도 없음), 총급여 3% 초과분의 15%
   function medicalCredit(g, general, special) {
     const th = g * 0.03;
@@ -786,7 +811,7 @@
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
     UNEMPLOYMENT: UI_RULES, unemployment, parentalLeave, brokerage, BASE_RATE, legalConversionRate, SERVICE, discharge,
-    earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, medicalCredit, yearEndTax,
+    earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, cardPlan, deductionSaving, medicalCredit, yearEndTax,
     CAR_TAX, carCcRate, carAge, carTax,
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
     PENSION, pensionCredit, prepaymentFee, loanStampTax, refinance,
