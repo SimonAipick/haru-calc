@@ -227,6 +227,51 @@
     const base = general >= th ? Math.min(general - th, 700 * MAN) + special : Math.max(0, special - (th - general));
     return base * 0.15;
   }
+  // 의료비 세액공제 상세 (소득세법 제59조의4② 법률 제21221호 시행 2026. 7. 1., 시행령 제118조의5 시행 2026. 10. 1., 2026-11-16 law.go.kr 원문 확인)
+  // o: gross(총급여), special(본인·6세 이하·65세 이상·장애인·중증질환자 등, 한도 없음), general(그 밖의 기본공제대상자, 700만원 한도),
+  //    preemie(미숙아·선천성이상아 20%), ivf(난임시술 30%). 모두 실손보험금을 뺀 금액.
+  // 총급여 3%에 모자라는 금액은 일반 → 특정 → 미숙아 → 난임 순으로 뺀다(②1호~4호 단서). taxCap(선택): 공제받을 수 있는 세액 상한
+  const MEDICAL = { floorRate: 0.03, generalCap: 700 * MAN, rate: 0.15, preemieRate: 0.2, ivfRate: 0.3, glassesCap: 50 * MAN, postnatalCap: 200 * MAN };
+  function medicalDetail(o) {
+    const v = (k) => Math.max(0, o[k] || 0);
+    const g = Math.max(0, o.gross || 0), floor = g * MEDICAL.floorRate;
+    const general = v('general'), special = v('special'), preemie = v('preemie'), ivf = v('ivf');
+    const t1 = Math.min(Math.max(0, general - floor), MEDICAL.generalCap);
+    let short = Math.max(0, floor - general);
+    const take = (x) => { const used = Math.min(x, short); short -= used; return x - used; };
+    const t2 = take(special), t3 = take(preemie), t4 = take(ivf);
+    const credit = (t1 + t2) * MEDICAL.rate + t3 * MEDICAL.preemieRate + t4 * MEDICAL.ivfRate;
+    const total = general + special + preemie + ivf;
+    const capped = o.taxCap != null && o.taxCap >= 0 && credit > o.taxCap;
+    const national = Math.floor(capped ? o.taxCap : credit);
+    const local = Math.floor(national * 0.1);
+    return { floor, total, toFloor: Math.max(0, floor - total), overCap: Math.max(0, general - floor - MEDICAL.generalCap),
+      t1, t2, t3, t4, credit, capped, national, local, refund: national + local };
+  }
+  // 맞벌이: 의료비를 실제로 낸 근로자가 공제받는다(시행령 제118조의5① '해당 근로자가 직접 부담'). 배우자 본인 의료비는
+  // 상대방이 받으면 일반 의료비(배우자가 65세 이상·장애인·중증질환자 등이면 특정 의료비)가 된다.
+  // o: me/sp {gross, self, taxCap, specialPerson}, special, general, preemie, ivf (가족 몫)
+  function medicalCouple(o) {
+    const fam = { special: o.special || 0, general: o.general || 0, preemie: o.preemie || 0, ivf: o.ivf || 0 };
+    const zero = { special: 0, general: 0, preemie: 0, ivf: 0 };
+    const claim = (who, other, ownSelf, otherSelf, f) => {
+      const x = { gross: who.gross, taxCap: who.taxCap, special: f.special + ownSelf, general: f.general,
+        preemie: f.preemie, ivf: f.ivf };
+      if (other.specialPerson) x.special += otherSelf; else x.general += otherSelf;
+      return medicalDetail(x);
+    };
+    const me = o.me, sp = o.sp;
+    const allMe = claim(me, sp, me.self || 0, sp.self || 0, fam);
+    const allSp = claim(sp, me, sp.self || 0, me.self || 0, fam);
+    const splitA = [claim(me, sp, me.self || 0, 0, fam), claim(sp, me, sp.self || 0, 0, zero)];
+    const splitB = [claim(me, sp, me.self || 0, 0, zero), claim(sp, me, sp.self || 0, 0, fam)];
+    const sum = (a) => a[0].refund + a[1].refund;
+    const split = sum(splitA) >= sum(splitB) ? { parts: splitA, familyTo: 'me' } : { parts: splitB, familyTo: 'sp' };
+    split.refund = sum(split.parts);
+    const options = [{ key: 'me', refund: allMe.refund }, { key: 'sp', refund: allSp.refund }, { key: 'split', refund: split.refund }];
+    const best = options.reduce((a, b) => (b.refund > a.refund ? b : a));
+    return { allMe, allSp, split, best: best.key };
+  }
   function yearEndTax(o) {
     const g = o.gross;
     const n = (k) => Math.max(0, o[k] || 0);
@@ -811,7 +856,7 @@
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
     UNEMPLOYMENT: UI_RULES, unemployment, parentalLeave, brokerage, BASE_RATE, legalConversionRate, SERVICE, discharge,
-    earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, cardPlan, deductionSaving, medicalCredit, yearEndTax,
+    earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, cardPlan, deductionSaving, medicalCredit, MEDICAL, medicalDetail, medicalCouple, yearEndTax,
     CAR_TAX, carCcRate, carAge, carTax,
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
     PENSION, pensionCredit, prepaymentFee, loanStampTax, refinance,

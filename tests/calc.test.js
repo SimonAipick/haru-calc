@@ -319,6 +319,36 @@ var cpD = C.cardPlan({ gross: 3e7, debit: 9e6, transit: 1e6 });
 eq('cp D now', cpD.now.deduction, 850000); eq('cp D needDebit', cpD.needDebit, 7166667, 1);
 eq('saving 15%', C.deductionSaving(1000000, 0.15), 165000); eq('saving 24%', C.deductionSaving(750000, 0.24), 198000);
 
+// 의료비 세액공제 상세 — 손계산 (소득세법 제59조의4②)
+// 1: 총급여 5천만(3% = 150만), 일반 300만 → 150만 × 15% = 22만 5천, 지방 2만 2,500
+var m1 = C.medicalDetail({ gross: 5e7, general: 3e6 });
+eq('med1 floor', m1.floor, 1500000); eq('med1 national', m1.national, 225000); eq('med1 refund', m1.refund, 247500);
+// 2: 일반 100만이 문턱에 50만 모자람 → 본인 200만에서 50만 빼고 150만 × 15%, 기존 medicalCredit과 같아야 함
+var m2 = C.medicalDetail({ gross: 5e7, general: 1e6, special: 2e6 });
+eq('med2 t2', m2.t2, 1500000); eq('med2 national', m2.national, 225000); eq('med2 = old', m2.credit, C.medicalCredit(5e7, 1e6, 2e6));
+// 3: 총급여 4천만(120만), 난임시술 500만만 → (500 − 120) × 30% = 114만
+var m3 = C.medicalDetail({ gross: 4e7, ivf: 5e6 });
+eq('med3 t4', m3.t4, 3800000); eq('med3 national', m3.national, 1140000);
+// 4: 총급여 1억(300만), 일반 1,500만 → 1,200만이지만 700만 한도 → 105만, 한도 넘은 500만
+var m4 = C.medicalDetail({ gross: 1e8, general: 1.5e7 });
+eq('med4 t1', m4.t1, 7000000); eq('med4 national', m4.national, 1050000); eq('med4 overCap', m4.overCap, 5000000);
+// 5: 총급여 3천만(90만), 일반 50·특정 20·미숙아 300 → 모자란 40만을 특정 20, 미숙아 20 순으로 빼고 280만 × 20% = 56만
+var m5 = C.medicalDetail({ gross: 3e7, general: 5e5, special: 2e5, preemie: 3e6 });
+eq('med5 t2', m5.t2, 0); eq('med5 t3', m5.t3, 2800000); eq('med5 national', m5.national, 560000);
+// 6: 문턱 미달 → 공제 0, 남은 금액 / 세액 상한
+var m6 = C.medicalDetail({ gross: 5e7, general: 1e6 });
+eq('med6 national', m6.national, 0); eq('med6 toFloor', m6.toFloor, 500000);
+var m7 = C.medicalDetail({ gross: 5e7, general: 3e6, taxCap: 100000 });
+eq('med7 capped', m7.capped, true); eq('med7 national', m7.national, 100000); eq('med7 local', m7.local, 10000);
+// 7: 맞벌이 — 나 6천만·본인 100만, 배우자 2천만·본인 100만
+// 모두 나: 특정 100 + 일반(배우자) 100, 문턱 180 → 20만 × 15% = 3만(+지방 3천) / 모두 배우자: 일반 100 − 60 = 40 + 특정 100 = 140 × 15% = 21만(+2.1만)
+// 각자: 나 0, 배우자 (100 − 60) × 15% = 6만(+6천)
+var mc = C.medicalCouple({ me: { gross: 6e7, self: 1e6 }, sp: { gross: 2e7, self: 1e6 } });
+eq('mc allMe', mc.allMe.refund, 33000); eq('mc allSp', mc.allSp.refund, 231000); eq('mc split', mc.split.refund, 66000); eq('mc best', mc.best, 'sp');
+// 배우자 결정세액이 5만원뿐이면 몰아줘도 5만 5천만 돌려받음 → 나에게 모으는 쪽(3만 3천)보다 여전히 큼
+var mc2 = C.medicalCouple({ me: { gross: 6e7, self: 1e6 }, sp: { gross: 2e7, self: 1e6, taxCap: 50000 } });
+eq('mc2 allSp', mc2.allSp.refund, 55000); eq('mc2 best', mc2.best, 'sp');
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }
