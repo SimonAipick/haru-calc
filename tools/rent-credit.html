@@ -1,0 +1,167 @@
+<!--
+{"slug": "rent-credit", "title": "월세 세액공제 계산기", "category": "직장·급여", "order": 13,
+ "short": "17%·15% 환급액, 2026년 배우자 추가 공제",
+ "description": "총급여와 월세 계약 기간·월세를 넣으면 2026년 귀속 월세 세액공제액(지방소득세 포함)을 계산합니다. 계약서 기준 일할 계산, 연 1천만원 한도, 표준세액공제 13만원과 비교한 실제 이득, 2026년부터 생긴 주말부부·따로 사는 배우자 추가 공제까지 반영합니다.",
+ "lead": "무주택 세대주가 낸 월세는 최대 17%를 세금에서 돌려받습니다. 올해 이사했거나 배우자와 따로 월세를 산다면 얼마까지 받을 수 있는지 확인하세요."}
+-->
+<!-- 근거 (2026-11-17 law.go.kr 원문 확인):
+     조세특례제한법 제95조의2 (법률 제21467호 판, 시행 2026. 9. 18. / ①~④ 마지막 개정 법률 제21223호 2025. 12. 23., 시행 2026. 1. 1.)
+       https://www.law.go.kr/법령/조세특례제한법/제95조의2
+       ① 과세기간 종료일 현재 무주택 세대의 세대주(세대주가 이 항·제87조②·소득세법 제52조④⑤ 공제를 받지 않으면 세대원, 외국인 포함),
+          총급여 8천만원 이하(종합소득금액 7천만원 초과자 제외) 15%, 총급여 5,500만원 이하(종합소득금액 4,500만원 초과자 제외) 17%,
+          월세액 1천만원 초과분은 없는 것으로 봄, 종합소득산출세액에서 공제
+       ② (신설) 세대주의 배우자가 ① 요건 + 주소를 달리하는 등 요건을 갖추면 추가 공제, 두 사람 월세 합계 1천만원 초과분은 배우자 몫에서 뺌
+       부칙(법률 제21223호) 제1조 2026. 1. 1. 시행, 제17조 제95조의2 개정규정은 이 법 시행 이후 월세액을 지급하는 경우부터 적용
+     조세특례제한법 시행령 제95조 (대통령령 제36587호 판, 시행 2026. 9. 18. / ②③⑤ 개정 2026. 2. 27.)
+       https://www.law.go.kr/법령/조세특례제한법시행령/제95조
+       ① 세대 = 거주자와 배우자(생계를 달리해도 같은 세대) + 같은 주소에서 생계를 같이 하는 직계존비속·형제자매
+       ② 주택: 국민주택규모 또는 기준시가 4억원 이하(기본공제대상 자녀·손자녀 3명 이상이면 전용 100㎡ 이하 또는 기준시가 4억원 이하),
+          오피스텔·고시원 포함, 다가구는 가구당 전용면적, 딸린 토지 도시지역 5배·그 밖 10배 이하,
+          임대차계약증서 주소지 = 주민등록표 등본 주소지, 본인 또는 기본공제대상자(소득세법 제50조①2·3호)가 계약
+       ③ 월세액 = 임대차계약증서상 임차기간 월세 합계 ÷ 계약기간 일수 × 해당 과세기간 임차일수 (사글세 포함)
+       ⑤ 배우자 추가 공제 요건: 세대주와 배우자 주소지의 시(행정시 포함)·군·자치구가 서로 다를 것, 배우자와 같은 주소의 직계존비속·형제자매가 무주택
+     소득세법 제59조의4⑨: 특별소득공제·특별세액공제·월세 세액공제를 신청하지 않은 근로자에게 표준세액공제 13만원 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>공제받을 사람</legend>
+    <label>총급여 <small>연봉에서 식대 등 비과세를 뺀 금액</small><input class="money" id="gross" inputmode="numeric" placeholder="예: 40,000,000"></label>
+    <label>근로소득 외 다른 종합소득금액 <small>선택. 사업·이자·배당·연금·기타소득 중 종합과세되는 소득금액. 없으면 비워 두세요</small><input class="money" id="other" inputmode="numeric"></label>
+  </fieldset>
+  <fieldset>
+    <legend>지금 사는 집 월세 계약 <small>계약서에 적힌 대로</small></legend>
+    <div class="grid2">
+      <label>계약 시작일<input type="date" id="start"></label>
+      <label>계약 종료일<input type="date" id="end"></label>
+    </div>
+    <label>월세 <small>관리비가 따로 적혀 있으면 월세만</small><input class="money" id="monthly" inputmode="numeric" placeholder="예: 600,000"></label>
+    <label>올해 중간에 이 집에서 나왔다면 나온 날 <small>선택</small><input type="date" id="moveOut"></label>
+    <label>올해 이사 전 집의 월세 공제 대상액 <small>선택. 같은 조건의 집이었다면 그 집 몫을 따로 계산해 넣으세요</small><input class="money" id="prev" inputmode="numeric"></label>
+    <label>올해 월세액 직접 입력 <small>선택. 넣으면 위 계약 정보 대신 이 금액을 씁니다</small><input class="money" id="direct" inputmode="numeric"></label>
+  </fieldset>
+  <fieldset>
+    <legend>세금 한도</legend>
+    <label>공제받을 수 있는 세금 <small>선택. 작년 원천징수영수증의 결정세액을 넣으면 그 안에서만 공제합니다</small><input class="money" id="cap" inputmode="numeric" placeholder="비워 두면 한도 없이 계산"></label>
+    <label class="check"><input type="checkbox" id="otherSpecial"> 보험료·의료비·교육비·기부금 공제도 받는다 (표준세액공제 13만원을 어차피 못 받는 경우)</label>
+  </fieldset>
+  <label class="check"><input type="checkbox" id="couple"> 배우자가 다른 시·군·구에서 따로 월세를 산다 (주말부부 등, 2026년 지급분부터)</label>
+  <fieldset id="coupleBox" hidden>
+    <legend>배우자 <small>배우자도 무주택·총급여 8천만원 이하 등 요건을 모두 갖춰야 합니다</small></legend>
+    <div class="grid2">
+      <label>배우자 총급여<input class="money" id="spGross" inputmode="numeric" placeholder="예: 35,000,000"></label>
+      <label>배우자의 올해 월세액<input class="money" id="spRent" inputmode="numeric" placeholder="예: 4,800,000"></label>
+    </div>
+    <div class="grid2">
+      <label>배우자 다른 종합소득금액 <small>선택</small><input class="money" id="spOther" inputmode="numeric"></label>
+      <label>배우자 공제받을 수 있는 세금 <small>선택</small><input class="money" id="spCap" inputmode="numeric"></label>
+    </div>
+  </fieldset>
+  <button type="submit">월세 공제 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  const YEAR = 2026;
+  const box = UI.$('coupleBox'), chk = UI.$('couple');
+  chk.addEventListener('change', function () { box.hidden = !chk.checked; });
+  UI.bind('f', 'out', function () {
+    const gross = UI.num('gross');
+    if (!gross) return null;
+    const rows = [], notes = [];
+    let rent;
+    if (UI.$('direct').value.trim()) {
+      rent = UI.num('direct');
+      rows.push(['올해 월세액 (직접 입력)', Calc.won(rent)]);
+    } else {
+      const start = UI.date('start'), end = UI.date('end'), monthly = UI.num('monthly');
+      if (!start || !end || !monthly || end < start) return null;
+      const y = Calc.rentYearAmount({ start: start, end: end, monthly: monthly, moveOut: UI.date('moveOut') }, YEAR);
+      rent = y.amount + UI.num('prev');
+      rows.push(['계약서상 월세 합계', Calc.won(y.total) + ' (' + y.months + '개월)'],
+        ['계약 기간 / 올해 산 날', y.contractDays + '일 / ' + y.days + '일'],
+        ['이 집 올해 월세액 (일할 계산)', Calc.won(y.amount)]);
+      if (UI.num('prev') > 0) rows.push(['이사 전 집 포함 올해 월세액', Calc.won(rent)]);
+      if (!y.even) notes.push('계약 기간이 딱 떨어지는 개월 수가 아니라서 ' + y.months + '개월치 월세로 계약서 합계를 잡았습니다. 계약서에 적힌 총액이 다르면 아래 \'올해 월세액 직접 입력\' 칸에 (계약서 합계 ÷ 계약 일수 × 올해 산 날)을 넣으세요.');
+      if (y.days === 0) notes.push(YEAR + '년에 이 계약으로 산 날이 없습니다. 계약 날짜를 확인하세요.');
+    }
+    const cap = UI.$('cap').value.trim() ? UI.num('cap') : null;
+    const otherSpecial = UI.$('otherSpecial').checked;
+    const r = Calc.rentCredit({ gross: gross, other: UI.num('other'), rent: rent, taxCap: cap, otherSpecial: otherSpecial });
+    rows.push(['종합소득금액 (근로소득금액 + 다른 소득)', Calc.won(r.income)]);
+    if (!r.rate) {
+      notes.unshift(gross > Calc.RENT.grossMax
+        ? '총급여가 8천만원을 넘어 월세 세액공제 대상이 아닙니다.'
+        : '근로소득금액과 다른 소득을 합친 종합소득금액이 7천만원을 넘어 월세 세액공제 대상이 아닙니다.');
+      return UI.result(['올해 월세로 돌려받는 세금', '0원'], rows, notes);
+    }
+    rows.push(['공제율', (r.rate * 100) + '%'], ['공제 대상 월세 (연 1천만원 한도)', Calc.won(r.base)]);
+    rows.push(['월세 세액공제 (소득세)', Calc.won(r.national) + (r.capped ? ' (결정세액에서 막힘)' : '')],
+      ['지방소득세 감소', Calc.won(r.local)]);
+    if (!otherSpecial) rows.push(['표준세액공제 13만원 대신 받는 실제 이득', Calc.won(r.gain)]);
+    if (r.overCap > 0) notes.push('월세가 연 1천만원을 ' + Calc.won(r.overCap) + ' 넘었습니다. 넘는 부분은 공제되지 않습니다.');
+    if (r.capped) notes.push('계산된 공제액이 넣은 결정세액보다 커서 결정세액까지만 공제했습니다. 남는 공제는 다음 해로 넘어가지 않습니다.');
+    if (!otherSpecial && r.gain <= 0) notes.push('월세 공제를 신청하면 표준세액공제 13만원(지방소득세 포함 14만 3천원)을 받을 수 없습니다. 지금은 월세 공제가 더 작으니 신청하지 않는 편이 낫습니다.');
+    let headline = r.refund;
+    if (chk.checked && UI.num('spGross') > 0 && UI.num('spRent') > 0) {
+      const c = Calc.rentCouple({ head: { gross: gross, other: UI.num('other'), rent: rent, taxCap: cap },
+        sp: { gross: UI.num('spGross'), other: UI.num('spOther'), rent: UI.num('spRent'),
+          taxCap: UI.$('spCap').value.trim() ? UI.num('spCap') : null } });
+      rows.push(['[배우자] 공제 대상 월세', Calc.won(c.spBase) + (c.cut > 0 ? ' (두 사람 합계 1천만원 초과분 ' + Calc.won(c.cut) + ' 뺌)' : '')],
+        ['[배우자] 돌려받는 세금 (지방소득세 포함)', Calc.won(c.sp.refund) + (c.sp.rate ? ' · 공제율 ' + c.sp.rate * 100 + '%' : ' · 소득 요건 미달')],
+        ['[부부 합계] 돌려받는 세금', Calc.won(c.refund)]);
+      headline = c.refund;
+      notes.push('배우자 추가 공제는 2026년 1월 1일 이후 낸 월세부터 적용됩니다. 두 사람 주민등록 주소의 시·군·구가 서로 달라야 하고(같은 시 안의 다른 동은 안 됨), 배우자와 같은 주소에 사는 부모님·형제자매 등이 있다면 그분들도 집이 없어야 합니다.');
+    }
+    notes.push('주택 요건: 국민주택규모(전용 85㎡) 이하이거나 기준시가 4억원 이하(오피스텔·고시원 포함). 기본공제대상 자녀·손자녀가 3명 이상이면 전용 100㎡ 이하까지 됩니다. 계약서 주소와 주민등록 주소가 같아야 하고, 계약은 본인이나 기본공제대상 가족이 해야 합니다.');
+    return UI.result(['올해 월세로 돌려받는 세금 (지방소득세 포함)', Calc.won(headline)], rows, notes);
+  });
+})();
+</script>
+<!-- guide -->
+<h2>월세 세액공제는 이렇게 계산합니다</h2>
+<p>집이 없는 세대의 세대주가 낸 월세의 15% 또는 17%를 소득세에서 빼 줍니다. 지방소득세는 소득세의 10%라 실제로 돌려받는 돈은 공제액의 1.1배입니다. 공제 대상 월세는 1년에 1천만원까지입니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>소득 기준</th><th>공제율</th><th>월세 1천만원일 때 최대 환급 (지방소득세 포함)</th></tr></thead>
+  <tbody>
+    <tr><td>총급여 5,500만원 이하 (종합소득금액 4,500만원 이하)</td><td>17%</td><td>187만원</td></tr>
+    <tr><td>총급여 8천만원 이하 (종합소득금액 7천만원 이하)</td><td>15%</td><td>165만원</td></tr>
+    <tr><td>총급여 8천만원 초과 또는 종합소득금액 7천만원 초과</td><td colspan="2">대상 아님</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="formula">월세 세액공제 = min(올해 월세액, 1천만원) × 17% 또는 15% (결정세액 한도)</p>
+<p>근로소득만 있는 사람은 종합소득금액이 근로소득금액(총급여 − 근로소득공제)이라 소득 기준은 사실상 총급여로 정해집니다. 부업·이자·배당 등 종합과세되는 다른 소득이 있으면 그 금액을 더해서 따지므로, 총급여가 기준 안이어도 공제율이 15%로 내려가거나 대상에서 빠질 수 있습니다.</p>
+
+<h2>올해 월세액은 계약서 기준으로 날짜만큼 나눕니다</h2>
+<p>공제 대상 월세액은 계약서에 적힌 임차 기간 동안 낼 월세 합계를 계약 기간 일수로 나눈 뒤, 올해 실제로 산 날수를 곱해 구합니다. 그래서 연 중간에 이사했다면 두 집 몫을 각각 날짜만큼 계산해 더합니다.</p>
+<p>예를 들어 2026년 7월 1일부터 2년 계약(2028년 6월 30일까지), 월세 60만원이면 계약서 합계는 1,440만원이고 계약 기간은 731일(2028년 2월 29일 포함)입니다. 2026년에 산 날은 184일이라 올해 월세액은 1,440만원 × 184 ÷ 731 ≈ <strong>362만 4천원</strong>입니다.</p>
+
+<h2>2026년에 바뀐 점</h2>
+<ul>
+  <li><strong>따로 사는 배우자도 추가로 공제:</strong> 세대주가 월세 공제를 받고, 배우자가 다른 시·군·구에서 따로 월세를 살며 요건을 모두 갖추면 배우자도 공제받습니다. 두 사람 월세 합계가 1천만원을 넘으면 넘는 만큼을 배우자 몫에서 뺍니다. 2026년 1월 1일 이후 낸 월세부터 적용됩니다.</li>
+  <li><strong>자녀 셋 이상이면 더 넓은 집도:</strong> 기본공제대상 자녀·손자녀(입양·위탁아동 포함)가 3명 이상이면 전용 85㎡ 대신 100㎡ 이하 주택까지 대상입니다. 기준시가 4억원 이하 기준은 그대로입니다. 이 조항은 2026년 2월 27일 시행령 개정으로 들어왔습니다.</li>
+</ul>
+
+<h2>누가 받을 수 있나요</h2>
+<ul>
+  <li><strong>12월 31일 기준 무주택 세대의 세대주</strong>가 기본입니다. 세대주가 월세 공제, 주택청약저축 소득공제, 주택임차차입금·장기주택저당차입금 이자 공제를 받지 않으면 세대원도 받을 수 있습니다.</li>
+  <li>배우자는 생계를 달리해도 같은 세대로 보므로, 배우자 명의 집이 있으면 무주택이 아닙니다.</li>
+  <li>등록 외국인과 국내거소신고를 한 외국국적동포도 요건을 갖추면 받을 수 있습니다.</li>
+  <li>집 요건: 국민주택규모(전용 85㎡) 이하이거나 기준시가 4억원 이하. 오피스텔과 고시원도 포함되고, 다가구주택은 가구당 전용면적으로 봅니다.</li>
+  <li>임대차계약서 주소와 주민등록등본 주소가 같아야 하고(전입신고), 계약은 본인이나 기본공제대상 배우자·부양가족이 해야 합니다.</li>
+</ul>
+
+<h2>예시: 총급여 4천만원, 월세 55만원을 1년 내내 냄</h2>
+<p>근로소득금액은 4천만원 − 1,125만원 = 2,875만원이라 17% 대상입니다. 올해 월세 660만원 × 17% = <strong>112만 2천원</strong>, 지방소득세 11만 2,200원을 더하면 약 <strong>123만 4천원</strong>을 돌려받습니다. 다만 보험료·의료비 등 다른 특별공제가 없었다면 표준세액공제 13만원(지방소득세 포함 14만 3천원)을 못 받게 되므로 실제로 늘어나는 환급은 약 109만원입니다. 결정세액이 이보다 적으면 결정세액까지만 공제됩니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>회사 연말정산에서 빠뜨렸어요.</h3>
+<p>5월 종합소득세 신고 때 넣거나, 그 뒤에도 경정청구로 돌려받을 수 있습니다. 경정청구는 법정신고기한부터 5년 안에 할 수 있습니다.</p>
+<h3>집주인이 싫어하면 못 받나요?</h3>
+<p>법에 정한 요건은 무주택 세대, 소득 기준, 주택 기준, 계약서와 주민등록 주소 일치, 본인 또는 가족 명의 계약입니다. 집주인 동의는 요건에 없습니다. 계약서 사본, 주민등록등본, 월세를 보낸 계좌이체 내역을 챙겨 두면 됩니다.</p>
+<h3>전입신고를 늦게 했어요.</h3>
+<p>계약서 주소와 주민등록 주소가 같아야 하므로, 전입신고 전에 낸 월세는 인정되지 않을 수 있습니다. 애매하면 국세청 상담센터(126)에 확인하세요.</p>
+<h3>세액공제가 결정세액보다 크면요?</h3>
+<p>결정세액이 0원이 될 때까지만 공제되고 남는 금액은 다음 해로 넘어가지 않습니다. 이 계산기에 작년 결정세액을 넣으면 그 한도를 반영합니다. 다른 공제와 함께 따져 보려면 <a href="../year-end-tax/">연말정산 환급 계산기</a>를 쓰세요.</p>
+<h3>카드로 낸 월세는 카드 소득공제도 되나요?</h3>
+<p>아니요. 월세 세액공제를 받은 월세액은 신용카드 사용금액에서 빠집니다(조특법 시행령 제121조의2⑥11호). 월세 공제 대상이 아니어서 공제를 신청하지 않은 월세만 카드 공제에 들어갈 수 있습니다. 카드 공제 계획은 <a href="../card-deduction/">신용카드 소득공제 계산기</a>에서 확인하세요.</p>

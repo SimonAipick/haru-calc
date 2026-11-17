@@ -349,6 +349,33 @@ eq('mc allMe', mc.allMe.refund, 33000); eq('mc allSp', mc.allSp.refund, 231000);
 var mc2 = C.medicalCouple({ me: { gross: 6e7, self: 1e6 }, sp: { gross: 2e7, self: 1e6, taxCap: 50000 } });
 eq('mc2 allSp', mc2.allSp.refund, 55000); eq('mc2 best', mc2.best, 'sp');
 
+// 월세 세액공제 (조특법 제95조의2, 2026년 지급분)
+// 1: 총급여 5천만 → 근로소득금액 5,000 − (1,200 + 500×5%) = 3,775만 ≤ 4,500만 → 17%. 600만 × 17% = 102만, 지방 10.2만, 표준공제 14.3만 포기
+var r1 = C.rentCredit({ gross: 5e7, rent: 6e6 });
+eq('rent1 rate', r1.rate, 0.17); eq('rent1 national', r1.national, 1020000); eq('rent1 refund', r1.refund, 1122000); eq('rent1 gain', r1.gain, 979000);
+// 2: 같은 사람에 다른 종합소득 1천만 → 4,775만 > 4,500만 → 15%
+eq('rent2 national', C.rentCredit({ gross: 5e7, other: 1e7, rent: 6e6 }).national, 900000);
+// 3: 총급여 7천만, 월세 1,200만 → 1천만 한도 × 15% = 150만, 초과 200만
+var r3 = C.rentCredit({ gross: 7e7, rent: 1.2e7 });
+eq('rent3 national', r3.national, 1500000); eq('rent3 over', r3.overCap, 2000000);
+// 4: 총급여 8,100만 → 대상 아님 / 총급여 7천만 + 다른 소득 1,500만 → 5,675 + 1,500 = 7,175만 > 7천만 → 대상 아님
+eq('rent4 gross over', C.rentCredit({ gross: 8.1e7, rent: 6e6 }).national, 0);
+eq('rent4 income over', C.rentCredit({ gross: 7e7, other: 1.5e7, rent: 6e6 }).national, 0);
+// 5: 결정세액 50만원이면 50만원까지만
+var r5 = C.rentCredit({ gross: 5e7, rent: 6e6, taxCap: 500000 });
+eq('rent5 capped', r5.capped, true); eq('rent5 national', r5.national, 500000); eq('rent5 local', r5.local, 50000);
+// 6: 배우자 추가 공제 — 세대주 700만(5천만, 17%) + 배우자 500만(4천만 → 근로소득금액 2,875만, 17%) → 합계 1,200만, 초과 200만을 배우자 몫에서 빼 300만
+var rc = C.rentCouple({ head: { gross: 5e7, rent: 7e6 }, sp: { gross: 4e7, rent: 5e6 } });
+eq('rentC spBase', rc.spBase, 3000000); eq('rentC head', rc.head.refund, 1309000); eq('rentC sp', rc.sp.refund, 561000); eq('rentC total', rc.refund, 1870000);
+// 7: 시행령 제95조③ 일할 계산. 2025-03-01~2027-02-28 월 50만 → 24개월 1,200만 ÷ 730일 × 2026년 365일 = 600만
+var ry = C.rentYearAmount({ start: D('2025-03-01'), end: D('2027-02-28'), monthly: 500000 }, 2026);
+eq('rentY months', ry.months, 24); eq('rentY days', ry.contractDays, 730); eq('rentY amount', ry.amount, 6000000); eq('rentY even', ry.even, true);
+// 8: 2026-07-01 입주, 2028-06-30까지 월 60만 → 1,440만 ÷ 731일(2028년 윤일) × 184일 = 3,624,623
+var ry2 = C.rentYearAmount({ start: D('2026-07-01'), end: D('2028-06-30'), monthly: 600000 }, 2026);
+eq('rentY2 days', ry2.days, 184); eq('rentY2 contractDays', ry2.contractDays, 731); eq('rentY2 amount', ry2.amount, 3624623);
+// 9: 같은 계약(7번)에서 2026-06-30에 이사 → 181일, 1,200만 ÷ 730 × 181 = 2,975,342
+eq('rentY3 amount', C.rentYearAmount({ start: D('2025-03-01'), end: D('2027-02-28'), monthly: 500000, moveOut: D('2026-06-30') }, 2026).amount, 2975342);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

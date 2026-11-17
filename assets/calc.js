@@ -852,6 +852,56 @@
       cost: a - credit, net: a - credit - gift, rate: a ? credit / a : 0 };
   }
 
+  // 월세 세액공제 (조특법 제95조의2, 법률 제21223호 2025. 12. 23. 개정·2026. 1. 1. 이후 지급분부터, 시행령 제95조 2026. 2. 27. 개정,
+  // 2026-11-17 law.go.kr 원문 확인). 총급여 8천만원 이하(종합소득금액 7천만원 초과자 제외) 15%,
+  // 총급여 5,500만원 이하(종합소득금액 4,500만원 초과자 제외) 17%, 월세액 연 1천만원 한도. 종합소득산출세액에서 공제.
+  // ② 2026년부터: 세대주와 시·군·구를 달리하는 배우자도 요건을 갖추면 추가 공제, 두 사람 월세액 합계 1천만원 초과분은 배우자 몫에서 뺌
+  const RENT = { cap: 1000 * MAN, grossMax: 8000 * MAN, incomeMax: 7000 * MAN, grossLow: 5500 * MAN, incomeLow: 4500 * MAN,
+    rate: 0.15, lowRate: 0.17, standard: 13 * MAN };
+  // 공제율: 0이면 대상 아님. other = 근로소득 외에 종합소득에 합산하는 소득금액(사업·이자·배당·연금·기타)
+  function rentRate(gross, other) {
+    const g = Math.max(0, gross || 0);
+    const income = Math.max(0, g - earnedIncomeDeduction(g)) + Math.max(0, other || 0);
+    if (g <= 0 || g > RENT.grossMax || income > RENT.incomeMax) return { rate: 0, income };
+    return { rate: g <= RENT.grossLow && income <= RENT.incomeLow ? RENT.lowRate : RENT.rate, income };
+  }
+  // 시행령 제95조③: 계약서상 임차기간 월세 합계 ÷ 계약기간 일수 × 올해 임차일수
+  // c: { start, end (Date, 계약서상 마지막 날), monthly, total(선택: 계약서상 월세 합계), moveOut(선택: 실제로 나간 날) }
+  function rentYearAmount(c, year) {
+    const end = c.moveOut && c.moveOut < c.end ? c.moveOut : c.end;
+    const months = fullMonths(c.start, addDays(c.end, 1));
+    const contractDays = daysBetween(c.start, c.end) + 1;
+    const total = c.total > 0 ? c.total : (c.monthly || 0) * months;
+    const from = c.start > new Date(year, 0, 1) ? c.start : new Date(year, 0, 1);
+    const to = end < new Date(year, 11, 31) ? end : new Date(year, 11, 31);
+    const days = to < from ? 0 : daysBetween(from, to) + 1;
+    const even = addMonths(c.start, months).getTime() === addDays(c.end, 1).getTime();
+    return { months, even, contractDays, total, days, amount: contractDays > 0 ? Math.floor(total * days / contractDays) : 0 };
+  }
+  // o: { gross, other, rent(올해 월세액), taxCap(선택: 공제 전 결정세액), otherSpecial(선택: 다른 특별세액공제 등이 있는지) }
+  function rentCredit(o) {
+    const r = rentRate(o.gross, o.other);
+    const rent = Math.max(0, o.rent || 0);
+    const base = Math.min(rent, RENT.cap);
+    const credit = Math.floor(base * r.rate);
+    const capped = o.taxCap != null && o.taxCap >= 0 && credit > o.taxCap;
+    const national = capped ? Math.floor(o.taxCap) : credit;
+    const local = Math.floor(national * 0.1);
+    // 월세 공제를 신청하면 표준세액공제 13만원은 받을 수 없다(소득세법 제59조의4⑨)
+    const standardLost = o.otherSpecial ? 0 : Math.min(RENT.standard, o.taxCap != null && o.taxCap >= 0 ? o.taxCap : RENT.standard);
+    const gain = national + local - (standardLost + Math.floor(standardLost * 0.1));
+    return { rate: r.rate, income: r.income, rent, base, overCap: Math.max(0, rent - RENT.cap), credit, capped, national, local,
+      refund: national + local, standardLost, gain };
+  }
+  // ② 배우자 추가 공제: 세대주가 먼저 받고, 배우자 공제대상 = max(0, 배우자 월세 − max(0, 세대주 월세 + 배우자 월세 − 1천만원))
+  function rentCouple(o) {
+    const head = rentCredit(o.head);
+    const over = Math.max(0, (o.head.rent || 0) + (o.sp.rent || 0) - RENT.cap);
+    const spBase = Math.max(0, (o.sp.rent || 0) - over);
+    const sp = rentCredit(Object.assign({}, o.sp, { rent: spBase }));
+    return { head, sp, spBase, cut: Math.max(0, (o.sp.rent || 0) - spBase), refund: head.refund + sp.refund };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -867,6 +917,7 @@
     ELEC, electricBill, applianceKwh,
     JONGBU, PROP_TAX, progressiveTax, housePropertyTax, jongbu,
     HOMETOWN, hometownCredit,
+    RENT, rentRate, rentYearAmount, rentCredit, rentCouple,
     comma, won, korean,
   };
 
