@@ -272,6 +272,31 @@
     const best = options.reduce((a, b) => (b.refund > a.refund ? b : a));
     return { allMe, allSp, split, best: best.key };
   }
+  // 교육비 세액공제 (소득세법 제59조의4③ 법률 제21221호 2025. 12. 23. 개정·부칙 제5조 2026. 1. 1. 이후 지급분,
+  //   시행령 제118조의6 대통령령 제36737호 시행 2026. 10. 1. 판, 2026-11-18 law.go.kr 원문 확인)
+  // kind: pre(취학 전) · elem · mid · high(1명당 300만원) · univ(대학생 900만원) · self(본인, 한도 없음, 대학원·직업훈련·학자금 상환 포함)
+  //       · disabled(장애인 특수교육비, 한도 없음)
+  // tuition: 수업료·입학금·급식비·교과서·방과후 등, uniform: 교복(중·고 1명당 50만원), trip: 현장체험학습(초·중·고 1명당 30만원),
+  // arts: 9세 미만 또는 2학년 이하 초등학생의 예능 학원·체육시설 월 단위 주 1회 이상 수강료(2026년 지급분부터, lowGrade 필요)
+  const EDU = { rate: 0.15, schoolCap: 300 * MAN, univCap: 900 * MAN, uniformCap: 50 * MAN, tripCap: 30 * MAN };
+  function eduPerson(p) {
+    const v = (k) => Math.max(0, p[k] || 0), k = p.kind;
+    const school = k === 'elem' || k === 'mid' || k === 'high';
+    const uniform = (k === 'mid' || k === 'high') ? Math.min(v('uniform'), EDU.uniformCap) : 0;
+    const trip = school ? Math.min(v('trip'), EDU.tripCap) : 0;
+    const arts = k === 'elem' && p.lowGrade ? v('arts') : 0;
+    const sum = v('tuition') + uniform + trip + arts;
+    const cap = k === 'univ' ? EDU.univCap : (k === 'pre' || school) ? EDU.schoolCap : Infinity;
+    const base = Math.min(sum, cap);
+    return { kind: k, sum, base, over: sum - base, cutUniform: v('uniform') - uniform, cutTrip: v('trip') - trip, cutArts: v('arts') - arts };
+  }
+  function eduCredit(o) {
+    const persons = (o.people || []).map(eduPerson);
+    const base = persons.reduce((a, x) => a + x.base, 0), credit = base * EDU.rate;
+    const capped = o.taxCap != null && o.taxCap >= 0 && credit > o.taxCap;
+    const national = Math.floor(capped ? o.taxCap : credit), local = Math.floor(national * 0.1);
+    return { persons, base, credit, capped, national, local, refund: national + local };
+  }
   function yearEndTax(o) {
     const g = o.gross;
     const n = (k) => Math.max(0, o[k] || 0);
@@ -906,7 +931,7 @@
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
     UNEMPLOYMENT: UI_RULES, unemployment, parentalLeave, brokerage, BASE_RATE, legalConversionRate, SERVICE, discharge,
-    earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, cardPlan, deductionSaving, medicalCredit, MEDICAL, medicalDetail, medicalCouple, yearEndTax,
+    earnedIncomeDeduction, incomeTax, earnedTaxCredit, childTaxCredit, cardDeduction, cardPlan, deductionSaving, medicalCredit, MEDICAL, medicalDetail, medicalCouple, EDU, eduPerson, eduCredit, yearEndTax,
     CAR_TAX, carCcRate, carAge, carTax,
     homelessStart, homelessPoints, dependentPoints, accountPoints, spouseAccountPoints, housingScore,
     PENSION, pensionCredit, prepaymentFee, loanStampTax, refinance,

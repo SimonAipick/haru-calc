@@ -376,6 +376,29 @@ eq('rentY2 days', ry2.days, 184); eq('rentY2 contractDays', ry2.contractDays, 73
 // 9: 같은 계약(7번)에서 2026-06-30에 이사 → 181일, 1,200만 ÷ 730 × 181 = 2,975,342
 eq('rentY3 amount', C.rentYearAmount({ start: D('2025-03-01'), end: D('2027-02-28'), monthly: 500000, moveOut: D('2026-06-30') }, 2026).amount, 2975342);
 
+
+// 교육비 세액공제 — 손계산 (소득세법 제59조의4③, 시행령 제118조의6)
+// 1: 초등 2학년 방과후 50만 + 체험학습 40만(30만 한도) + 예능학원 300만 = 380만 → 300만 한도 → 45만, 지방 4만 5천
+var e1 = C.eduCredit({ people: [{ kind: 'elem', lowGrade: true, tuition: 5e5, trip: 4e5, arts: 3e6 }] });
+eq('edu1 sum', e1.persons[0].sum, 3800000); eq('edu1 base', e1.base, 3000000); eq('edu1 national', e1.national, 450000); eq('edu1 refund', e1.refund, 495000);
+// 2: 고등학생 수업료 등 100만 + 교복 60만(50만 한도) + 체험학습 20만 = 170만 → 25만 5천
+var e2 = C.eduCredit({ people: [{ kind: 'high', tuition: 1e6, uniform: 6e5, trip: 2e5 }] });
+eq('edu2 base', e2.base, 1700000); eq('edu2 cutUniform', e2.persons[0].cutUniform, 100000); eq('edu2 national', e2.national, 255000);
+// 3: 대학생 등록금 1,000만 → 900만 한도 → 135만 / 본인 대학원 1,200만 → 한도 없음 → 180만
+eq('edu3 univ', C.eduCredit({ people: [{ kind: 'univ', tuition: 1e7 }] }).national, 1350000);
+eq('edu3 self', C.eduCredit({ people: [{ kind: 'self', tuition: 1.2e7 }] }).national, 1800000);
+// 4: 초등 4학년(3학년 이상, 9세 이상) 예능학원 200만은 공제 안 됨 → 0, 중학생은 예능학원 칸 무시
+var e4 = C.eduCredit({ people: [{ kind: 'elem', lowGrade: false, arts: 2e6 }, { kind: 'mid', arts: 1e6 }] });
+eq('edu4 national', e4.national, 0); eq('edu4 cutArts', e4.persons[0].cutArts, 2000000);
+// 5: 취학 전 400만(300만 한도) + 위 고등학생 170만 = 470만 → 70만 5천, 지방 7만 500
+var e5 = C.eduCredit({ people: [{ kind: 'pre', tuition: 4e6 }, { kind: 'high', tuition: 1e6, uniform: 6e5, trip: 2e5 }] });
+eq('edu5 national', e5.national, 705000); eq('edu5 local', e5.local, 70500);
+// 6: 결정세액 50만에서 막힘 (대학생 900만 → 135만이지만 50만까지만)
+var e6 = C.eduCredit({ people: [{ kind: 'univ', tuition: 9e6 }], taxCap: 500000 });
+eq('edu6 capped', e6.capped, true); eq('edu6 national', e6.national, 500000); eq('edu6 refund', e6.refund, 550000);
+// 7: 장애인 특수교육비 1,000만 한도 없음 → 150만
+eq('edu7 disabled', C.eduCredit({ people: [{ kind: 'disabled', tuition: 1e7 }] }).national, 1500000);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }
