@@ -877,6 +877,58 @@
       cost: a - credit, net: a - credit - gift, rate: a ? credit / a : 0 };
   }
 
+  // ---------- 기부금 세액공제 (근로자 연말정산, 2026년 지급분) ----------
+  // law.go.kr 2026-11-20 확인: 소득세법 제59조의4④(법률 제21221호 판) 특례·일반기부금 합계 15%, 1천만원 초과분 30%.
+  //   ⑧의 3천만원 초과분 10%p 추가는 2024. 1. 1.~2024. 12. 31. 지급분만이라 반영하지 않음.
+  // 한도: 시행령 제118조의7①이 제81조④를 준용 — 특례(정치자금·고향사랑과 함께) 소득금액 − 이월결손금,
+  //   일반 = (소득금액 − 정치자금 − 고향사랑 − 특례) × 30%, 종교단체 기부가 있으면 × 10% + min(× 20%, 종교단체 외 일반).
+  // 정치자금: 조특법 제76조① 10만원까지 110분의 100, 넘는 금액 15%(그 금액이 3천만원 넘으면 초과분 25%). 근로자 본인 기부분만(국세청 안내).
+  // 제61조②: 산출세액을 넘거나 일반기부금 한도를 넘어 못 받은 기부금은 10년 이월. 정치자금·고향사랑은 이월 없음(국세청 안내).
+  // 특례·일반 기부금 세액공제를 받으면 표준세액공제 13만원은 받을 수 없음(제59조의4⑨1). 정치자금(조특법)은 상관없음.
+  const DONATION = { tier: 1000 * MAN, low: 0.15, high: 0.3, polT1: 10 * MAN, polT2: 3000 * MAN, polR1: 100 / 110,
+    polR2: 0.15, polR3: 0.25, generalRate: 0.3, religiousRate: 0.1, religiousOtherRate: 0.2, standard: 13 * MAN, local: 0.1 };
+  // o: { gross(총급여), other(근로 외 종합소득금액), political, hometown(고향사랑, 한도 계산에만 씀), special, general(종교단체 외),
+  //      religious(종교단체), taxCap(선택: 기부금 공제 전 결정세액, 없으면 null), otherSpecial(보험료·의료비·교육비·월세 공제를 따로 받는지) }
+  function donationCore(o) {
+    const D = DONATION, z = (v) => Math.max(0, v || 0);
+    const g = z(o.gross);
+    const income = Math.max(0, g - earnedIncomeDeduction(g)) + z(o.other);
+    const pol = z(o.political), sp = z(o.special), gen = z(o.general), rel = z(o.religious);
+    let room = income;
+    const polUsed = Math.min(pol, room); room -= polUsed;
+    room -= Math.min(z(o.hometown), room);
+    const spUsed = Math.min(sp, room); room -= spUsed;
+    const base = room;
+    const limit = rel > 0 ? base * D.religiousRate + Math.min(base * D.religiousOtherRate, gen) : base * D.generalRate;
+    const genUsed = Math.min(gen, rel > 0 ? Math.min(limit, base * D.generalRate) : limit);
+    const relUsed = Math.min(rel, Math.max(0, limit - genUsed));
+    const amount = spUsed + genUsed + relUsed;
+    const donFull = Math.floor(Math.min(amount, D.tier) * D.low + Math.max(0, amount - D.tier) * D.high + 1e-6);
+    const p1 = Math.min(polUsed, D.polT1), over = Math.max(0, polUsed - D.polT1);
+    const p2 = Math.min(over, D.polT2), p3 = Math.max(0, over - D.polT2);
+    const polFull = Math.floor(p1 * D.polR1 + p2 * D.polR2 + p3 * D.polR3 + 1e-6);
+    const hasCap = o.taxCap != null && o.taxCap >= 0;
+    const polNat = hasCap ? Math.min(polFull, Math.floor(o.taxCap)) : polFull;
+    const donNat = hasCap ? Math.min(donFull, Math.floor(o.taxCap) - polNat) : donFull;
+    const national = polNat + donNat;
+    const local = Math.floor(national * D.local + 1e-6);
+    // 특례·일반 공제를 받으면 표준세액공제 13만원을 포기해야 하는 경우
+    const standardLost = o.otherSpecial || donNat <= 0 ? 0
+      : Math.min(D.standard, hasCap ? Math.max(0, Math.floor(o.taxCap) - polNat) : D.standard);
+    return { income, pol, polUsed, polOver: pol - polUsed, p1, p2, p3, polFull, polNat, polLost: polFull - polNat,
+      sp, spUsed, spOver: sp - spUsed, base, limit, gen, genUsed, genOver: gen - genUsed, rel, relUsed, relOver: rel - relUsed,
+      amount, donFull, donNat, donLost: donFull - donNat, capped: hasCap && (polNat < polFull || donNat < donFull),
+      national, local, refund: national + local, standardLost,
+      betterStandard: standardLost > 0 && donNat < standardLost, toTier: Math.max(0, D.tier - amount) };
+  }
+  function donationCredit(o) {
+    const r = donationCore(o);
+    // 연말에 종교단체 외 일반기부금을 10만원 더 내면 돌려받는 세금이 얼마나 늘어나는지
+    const next = donationCore(Object.assign({}, o, { general: Math.max(0, o.general || 0) + 10 * MAN }));
+    r.next10 = next.refund - r.refund;
+    return r;
+  }
+
   // 월세 세액공제 (조특법 제95조의2, 법률 제21223호 2025. 12. 23. 개정·2026. 1. 1. 이후 지급분부터, 시행령 제95조 2026. 2. 27. 개정,
   // 2026-11-17 law.go.kr 원문 확인). 총급여 8천만원 이하(종합소득금액 7천만원 초과자 제외) 15%,
   // 총급여 5,500만원 이하(종합소득금액 4,500만원 초과자 제외) 17%, 월세액 연 1천만원 한도. 종합소득산출세액에서 공제.
@@ -942,6 +994,7 @@
     ELEC, electricBill, applianceKwh,
     JONGBU, PROP_TAX, progressiveTax, housePropertyTax, jongbu,
     HOMETOWN, hometownCredit,
+    DONATION, donationCredit,
     RENT, rentRate, rentYearAmount, rentCredit, rentCouple,
     comma, won, korean,
   };

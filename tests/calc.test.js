@@ -399,6 +399,37 @@ eq('edu6 capped', e6.capped, true); eq('edu6 national', e6.national, 500000); eq
 // 7: 장애인 특수교육비 1,000만 한도 없음 → 150만
 eq('edu7 disabled', C.eduCredit({ people: [{ kind: 'disabled', tuition: 1e7 }] }).national, 1500000);
 
+// 기부금 세액공제 (2026-11-20, 손으로 계산)
+// 1: 총급여 5,000만 → 근로소득공제 1,225만 → 소득금액 3,775만. 일반 120만 → 한도 1,132.5만 안 → 18만, 지방 1만 8천
+var dn1 = C.donationCredit({ gross: 5e7, general: 1200000 });
+eq('don1 income', dn1.income, 37750000); eq('don1 national', dn1.national, 180000); eq('don1 local', dn1.local, 18000);
+eq('don1 next10', dn1.next10, 16500);
+// 2: 정치자금 10만 → 90,909 / 30만 → 90,909.09 + 30,000 = 120,909
+eq('don2 pol10', C.donationCredit({ gross: 5e7, political: 100000 }).national, 90909);
+eq('don2 pol30', C.donationCredit({ gross: 5e7, political: 300000 }).national, 120909);
+// 3: 총급여 3,000만 → 공제 975만 → 소득금액 2,025만. 종교단체만 300만 → 한도 202.5만, 97.5만 이월 → 303,750
+var dn3 = C.donationCredit({ gross: 3e7, religious: 3e6 });
+eq('don3 relUsed', dn3.relUsed, 2025000); eq('don3 relOver', dn3.relOver, 975000); eq('don3 national', dn3.national, 303750);
+// 4: 같은 소득에 종교 300만 + 종교 외 100만 → 한도 202.5만 + min(405만, 100만) = 302.5만 → 453,750
+var dn4 = C.donationCredit({ gross: 3e7, religious: 3e6, general: 1e6 });
+eq('don4 genUsed', dn4.genUsed, 1000000); eq('don4 relUsed', dn4.relUsed, 2025000); eq('don4 national', dn4.national, 453750);
+// 5: 총급여 1억 → 소득금액 8,525만. 일반 1,500만 → 1,000만×15% + 500만×30% = 300만, 지방 30만
+var dn5 = C.donationCredit({ gross: 1e8, general: 1.5e7 });
+eq('don5 national', dn5.national, 3000000); eq('don5 refund', dn5.refund, 3300000); eq('don5 next10', dn5.next10, 33000);
+// 6: 특례 500만 + 일반 700만 = 1,200만 → 150만 + 60만 = 210만
+eq('don6 national', C.donationCredit({ gross: 1e8, special: 5e6, general: 7e6 }).national, 2100000);
+// 7: 결정세액 100만에서 막힘: 일반 1,000만(150만) → 100만만, 50만 이월
+var dn7 = C.donationCredit({ gross: 5e7, general: 1e7, taxCap: 1000000, otherSpecial: true });
+eq('don7 capped', dn7.capped, true); eq('don7 donNat', dn7.donNat, 1000000); eq('don7 donLost', dn7.donLost, 500000);
+// 8: 정치자금이 먼저: 정치 10만 + 일반 100만, 결정세액 10만 → 정치 90,909 + 일반 9,091
+var dn8 = C.donationCredit({ gross: 5e7, political: 100000, general: 1e6, taxCap: 100000, otherSpecial: true });
+eq('don8 polNat', dn8.polNat, 90909); eq('don8 donNat', dn8.donNat, 9091);
+// 9: 일반 50만뿐이고 다른 특별공제 없음 → 7만 5천 < 표준세액공제 13만 → 표준이 유리
+var dn9 = C.donationCredit({ gross: 5e7, general: 500000 });
+eq('don9 standardLost', dn9.standardLost, 130000); eq('don9 betterStandard', dn9.betterStandard, true);
+// 10: 정치자금만이면 표준세액공제와 같이 받음
+eq('don10 pol standard', C.donationCredit({ gross: 5e7, political: 100000 }).standardLost, 0);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

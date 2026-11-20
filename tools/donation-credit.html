@@ -1,0 +1,124 @@
+<!--
+{"slug": "donation-credit", "title": "기부금 세액공제 계산기", "category": "직장·급여", "order": 15,
+ "short": "한도·1천만원 구간·정치자금",
+ "description": "연말정산 기부금 세액공제를 계산합니다. 특례·일반·종교단체 기부금의 소득금액 한도(100%·30%·10%), 1천만원까지 15%·넘는 부분 30%, 정치자금 10만원까지 전액, 결정세액 한도와 10년 이월, 표준세액공제 13만원과의 비교까지 2026년 기부분 기준으로 보여 줍니다.",
+ "lead": "12월 31일까지 낸 기부금이 올해 연말정산에 들어갑니다. 얼마를 돌려받는지, 한도에 걸리지 않는지 미리 확인하세요."}
+-->
+<!-- 근거 (2026-11-20 law.go.kr 원문 확인)
+     소득세법 제59조의4④ (법률 제21221호, 시행 2026. 7. 1.): 특례기부금 + 일반기부금 합계의 15%, 1천만원 초과분 30%.
+       종교단체가 있으면 한도 = 소득금액 × 10% + min(소득금액 × 20%, 종교단체 외), 없으면 소득금액 × 30%.
+       기본공제 대상 배우자·부양가족(나이 제한 없음)이 낸 기부금 포함. ⑧ 3천만원 초과분 10%p 추가는 2024년 지급분만.
+       ⑨1 특별세액공제를 신청하면 표준세액공제 13만원 없음.
+     소득세법 시행령 제118조의7① → 제81조④ 준용 (대통령령 제36737호, 시행 2026. 10. 1.):
+       특례·고향사랑·정치자금 한도 = 소득금액 − 이월결손금, 일반 한도 = (소득금액 − 이월결손금 − 정치자금 − 고향사랑 − 특례 − 우리사주) × 30%
+     소득세법 제61조②: 산출세액 초과·일반기부금 한도 초과로 못 받은 기부금은 다음 해부터 10년 이월
+     조세특례제한법 제76조① (법률 제21467호, 시행 2026. 9. 18.): 정치자금 10만원까지 110분의 100, 초과 15%(3천만원 초과분 25%)
+     법인세법 제24조②1 (특례기부금 범위: 국가·지자체, 국방헌금, 이재민 구호금품, 사립학교 등 시설비·장학금, 국립대병원 등, 지정 모금법인)
+     국세청 연말정산 맞춤형 안내 '기부금 세액공제' https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=239040&mi=40978
+       (가족이 낸 기부금은 특례·일반만, 정치자금·고향사랑·우리사주는 이월 안 됨, 공제 순서) -->
+<form id="f" class="calc" novalidate>
+  <label>올해 총급여 <small>비과세를 뺀 연봉, 원천징수영수증 ⑯ 계</small><input class="money" id="gross" inputmode="numeric" placeholder="예: 50,000,000"></label>
+  <label>특례기부금 <small>국가·지자체, 이재민 구호, 사립학교 장학금 등</small><input class="money" id="special" inputmode="numeric" placeholder="없으면 비워 두세요"></label>
+  <label>일반기부금 (종교단체 외) <small>사회복지법인, 공익법인, 구호단체 등</small><input class="money" id="general" inputmode="numeric" placeholder="예: 1,200,000"></label>
+  <label>종교단체 기부금 <small>교회·성당·사찰 헌금, 시주 등</small><input class="money" id="religious" inputmode="numeric"></label>
+  <label>정치자금기부금 <small>정당·후원회·선관위, 본인이 낸 것만</small><input class="money" id="political" inputmode="numeric"></label>
+  <label>기부금 공제 전 결정세액 <small>선택, 모르면 작년 원천징수영수증의 결정세액</small><input class="money" id="cap" inputmode="numeric" placeholder="비워 두면 한도 미적용"></label>
+  <label class="check"><input type="checkbox" id="otherSpecial"> 보험료·의료비·교육비·월세 세액공제도 받는다</label>
+  <button type="submit">돌려받는 금액 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const gross = UI.num('gross');
+  const o = { gross, special: UI.num('special'), general: UI.num('general'), religious: UI.num('religious'),
+    political: UI.num('political'), otherSpecial: document.getElementById('otherSpecial').checked };
+  if (!gross || !(o.special || o.general || o.religious || o.political)) return null;
+  const capRaw = document.getElementById('cap').value.trim();
+  if (capRaw) o.taxCap = UI.num('cap');
+  const r = Calc.donationCredit(o);
+  const rows = [['근로소득금액 (한도 계산 기준)', Calc.won(r.income)]];
+  if (r.pol) {
+    rows.push(['정치자금 10만원까지 (100/110)', Calc.won(Math.floor(r.p1 * 100 / 110))]);
+    if (r.p2) rows.push(['정치자금 10만원 넘는 ' + Calc.won(r.p2) + ' × 15%', Calc.won(r.p2 * 0.15)]);
+    if (r.p3) rows.push(['그중 3천만원 넘는 ' + Calc.won(r.p3) + ' × 25%', Calc.won(r.p3 * 0.25)]);
+  }
+  if (r.sp) rows.push(['특례기부금 인정액', Calc.won(r.spUsed) + (r.spOver ? ' (한도 초과 ' + Calc.won(r.spOver) + ')' : '')]);
+  if (r.gen || r.rel) rows.push(['일반기부금 한도', Calc.won(r.limit)]);
+  if (r.gen) rows.push(['종교단체 외 인정액', Calc.won(r.genUsed) + (r.genOver ? ' (한도 초과 ' + Calc.won(r.genOver) + ')' : '')]);
+  if (r.rel) rows.push(['종교단체 인정액', Calc.won(r.relUsed) + (r.relOver ? ' (한도 초과 ' + Calc.won(r.relOver) + ')' : '')]);
+  if (r.amount) {
+    rows.push(['특례 + 일반 합계 ' + Calc.won(Math.min(r.amount, 1e7)) + ' × 15%', Calc.won(Math.min(r.amount, 1e7) * 0.15)]);
+    if (r.amount > 1e7) rows.push(['1천만원 넘는 ' + Calc.won(r.amount - 1e7) + ' × 30%', Calc.won((r.amount - 1e7) * 0.3)]);
+  }
+  rows.push(['소득세 공제', Calc.won(r.national) + (r.capped ? ' (결정세액 한도)' : '')],
+    ['지방소득세 공제 (소득세 공제의 10%)', Calc.won(r.local)],
+    ['돌려받는 세금 합계', Calc.won(r.refund)]);
+  const notes = [];
+  if (r.genOver || r.relOver) notes.push('일반기부금 한도를 넘은 ' + Calc.won(r.genOver + r.relOver) + '은 올해 공제를 못 받고, 다음 해부터 10년 안에 한도가 남는 해에 이어서 공제받습니다(이월). 영수증은 버리지 마세요.');
+  if (r.spOver) notes.push('특례기부금이 근로소득금액보다 많아 ' + Calc.won(r.spOver) + '은 올해 계산에서 뺐습니다.');
+  if (r.polOver) notes.push('정치자금기부금이 근로소득금액보다 많아 ' + Calc.won(r.polOver) + '은 계산에서 뺐습니다.');
+  if (r.donLost) notes.push('결정세액이 모자라 특례·일반기부금 공제 ' + Calc.won(r.donLost) + '을 올해 다 쓰지 못합니다. 이 몫의 기부금은 10년 동안 이월되어 다음 해에 공제받을 수 있습니다.');
+  if (r.polLost) notes.push('결정세액이 모자라 정치자금 공제 ' + Calc.won(r.polLost) + '은 받지 못하고, 정치자금은 이월도 되지 않습니다.');
+  if (r.betterStandard) notes.push('보험료·의료비·교육비·월세 공제 없이 기부금 공제만 받으면 표준세액공제 13만원을 포기해야 합니다. 기부금 공제(' + Calc.won(r.donNat) + ')가 13만원보다 적어 이 경우에는 표준세액공제가 유리합니다. 회사 연말정산에서 유리한 쪽이 자동으로 골라지는지 확인하세요.');
+  else if (r.standardLost) notes.push('다른 특별세액공제가 없으면 기부금 공제를 받는 대신 표준세액공제 13만원은 빠집니다. 그래도 기부금 공제가 ' + Calc.won(r.donNat - r.standardLost) + ' 더 많습니다.');
+  if (r.next10 > 0) notes.push('연말까지 종교단체 외 일반기부금을 10만원 더 내면 세금을 ' + Calc.won(r.next10) + ' 더 돌려받습니다' + (r.toTier > 0 && r.toTier < 1e7 ? ' (1천만원까지 ' + Calc.won(r.toTier) + ' 남음, 넘는 부분은 33%).' : '.'));
+  else if (o.taxCap != null) notes.push('결정세액이 이미 바닥이라 올해 더 내도 올해 돌려받는 세금은 늘지 않습니다.');
+  notes.push('고향사랑기부금은 따로 계산합니다. 근로소득만 있는 사람 기준이며, 작년에서 넘어온 이월 기부금과 우리사주조합기부금은 반영하지 않습니다. 1원 단위 버림 차이가 있을 수 있습니다.');
+  return UI.result(['돌려받는 세금 (소득세 + 지방소득세)', Calc.won(r.refund)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>기부금 세액공제란?</h2>
+<p>1년 동안 낸 기부금의 일정 비율을 연말정산 때 낼 세금(산출세액)에서 빼 주는 제도입니다. 본인이 낸 기부금뿐 아니라 <strong>기본공제를 받는 배우자·부모·자녀가 낸 특례·일반기부금</strong>도 합쳐서 공제받을 수 있습니다. 가족은 나이 제한이 없지만 소득 요건(연 소득금액 100만원 이하, 근로소득만 있으면 총급여 500만원 이하)은 갖춰야 합니다. 정치자금과 고향사랑기부금은 본인이 낸 것만 됩니다.</p>
+
+<h2>2026년 기부분 공제율</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>기부금 종류</th><th>소득세 공제율</th><th>지방소득세 포함</th></tr></thead>
+  <tbody>
+    <tr><td>특례 + 일반(종교단체 포함) 합계 1천만원까지</td><td>15%</td><td>16.5%</td></tr>
+    <tr><td>특례 + 일반 합계 중 1천만원 넘는 부분</td><td>30%</td><td>33%</td></tr>
+    <tr><td>정치자금 10만원까지</td><td>110분의 100</td><td>100% (전액)</td></tr>
+    <tr><td>정치자금 10만원 넘는 부분</td><td>15% (3천만원 넘는 부분 25%)</td><td>16.5% (27.5%)</td></tr>
+  </tbody>
+</table>
+</div>
+<p>2024년에 낸 기부금만 3천만원 넘는 부분에 10%p를 더 얹어 주는 특례가 있었는데, 2025년 이후 기부분에는 없습니다. 공제율이 기부금 종류마다 따로가 아니라 <strong>특례와 일반을 합친 금액</strong>으로 1천만원 구간을 나눈다는 점에 주의하세요.</p>
+<p class="formula">기부금 공제 = min(특례 + 일반, 1천만원) × 15% + (특례 + 일반 − 1천만원) × 30%</p>
+
+<h2>특례기부금과 일반기부금은 어떻게 다른가요?</h2>
+<ul>
+  <li><strong>특례기부금</strong>: 국가·지방자치단체에 낸 기부금, 국방헌금, 천재지변 이재민 구호금품, 사립학교·한국장학재단 등에 낸 시설비·장학금·연구비, 국립대병원 등에 낸 시설비·연구비, 재정경제부장관이 지정·고시한 사회복지 모금 법인에 낸 기부금 (법인세법 제24조②).</li>
+  <li><strong>일반기부금</strong>: 사회복지·문화·예술·교육·종교·자선·학술 등 공익 목적으로 지정된 단체에 낸 기부금. 종교단체 헌금도 여기에 들어가지만 한도가 따로 더 작습니다.</li>
+</ul>
+<p>어느 쪽인지는 단체가 발급한 <strong>기부금 영수증의 기부금 종류</strong>에 적혀 있고, 홈택스 연말정산 간소화 자료에도 종류별로 나옵니다. 확실하지 않으면 영수증 기준으로 입력하세요.</p>
+
+<h2>한도: 소득금액의 몇 %까지 인정되나요?</h2>
+<p>기준은 연봉이 아니라 <strong>근로소득금액</strong>(총급여 − 근로소득공제)입니다. 연봉 5,000만원이면 근로소득공제 1,225만원을 빼서 3,775만원이 기준입니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>종류</th><th>한도</th></tr></thead>
+  <tbody>
+    <tr><td>정치자금·고향사랑·특례기부금</td><td>근로소득금액의 100% (이 순서대로 채움)</td></tr>
+    <tr><td>일반기부금 (종교단체 기부가 없을 때)</td><td>(근로소득금액 − 정치자금 − 고향사랑 − 특례) × 30%</td></tr>
+    <tr><td>일반기부금 (종교단체 기부가 있을 때)</td><td>위 금액 × 10% + min(위 금액 × 20%, 종교단체 외 일반기부금)</td></tr>
+  </tbody>
+</table>
+</div>
+<p>예를 들어 연봉 3,000만원(근로소득금액 2,025만원)인 사람이 종교단체에만 300만원을 냈다면 한도는 202만 5천원입니다. 넘는 97만 5천원은 올해 공제를 못 받고 다음 해로 넘어갑니다. 같은 사람이 종교단체 외 단체에도 100만원을 냈다면 한도가 302만 5천원으로 늘어납니다.</p>
+
+<h2>한도를 넘거나 세금이 모자라면?</h2>
+<p>일반기부금 한도를 넘은 금액, 그리고 낼 세금이 모자라 공제받지 못한 특례·일반기부금은 <strong>다음 해부터 10년 동안 이월</strong>되어 한도와 세금이 남는 해에 이어서 공제받습니다(소득세법 제61조②). 회사 연말정산 때 기부금 명세서에 이월액을 적으면 됩니다. 정치자금·고향사랑·우리사주조합 기부금은 이월되지 않습니다.</p>
+
+<h2>표준세액공제 13만원과 비교</h2>
+<p>기부금(특례·일반) 세액공제는 보험료·의료비·교육비 공제와 같은 <strong>특별세액공제</strong>라서, 이 중 하나라도 받으면 표준세액공제 13만원은 받을 수 없습니다(월세 세액공제도 마찬가지). 다른 공제 없이 기부금만 50만원 냈다면 기부금 공제는 7만 5천원이라 13만원 표준세액공제가 더 유리합니다. 정치자금·고향사랑기부금 공제는 조세특례제한법에 따른 것이라 표준세액공제와 함께 받을 수 있습니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>언제까지 내야 올해 공제에 들어가나요?</h3>
+<p>기부금은 <strong>실제로 낸 날</strong>이 속한 해에 공제받습니다. 올해 공제를 받으려면 12월 31일까지 내야 하고, 약정만 하고 돈은 1월에 냈다면 내년 기부분이 됩니다. 연말 자동이체·계좌이체는 처리 날짜를 확인하세요.</p>
+<h3>간소화 자료에 안 나오면요?</h3>
+<p>단체가 국세청에 자료를 내지 않으면 간소화 서비스에 나오지 않습니다. 이때는 기부한 단체에 기부금 영수증을 받아 회사에 내면 됩니다. 종교단체 등 일부 단체 기부금은 간소화에 빠질 수 있으니 1월에 꼭 확인하세요.</p>
+<h3>맞벌이면 누가 공제받나요?</h3>
+<p>기부금은 낸 사람이 공제받는 것이 원칙이고, 배우자가 낸 기부금을 내가 공제받으려면 그 배우자가 나의 기본공제 대상(소득 요건 충족)이어야 합니다. 맞벌이처럼 둘 다 소득이 많으면 각자 낸 기부금을 각자 공제받습니다.</p>
+<h3>연말정산 환급 계산기와 결과가 다른 이유는?</h3>
+<p><a href="../year-end-tax/">연말정산 환급 계산기</a>는 기부금 한도를 따지지 않고 15%/30%만 곱합니다. 종교단체 기부금이 많거나 연봉에 비해 기부금이 많다면 이 계산기의 한도 결과를 보세요. 고향사랑기부금은 <a href="../hometown-donation/">고향사랑기부제 계산기</a>에서 따로 계산합니다.</p>
