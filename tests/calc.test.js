@@ -430,6 +430,35 @@ eq('don9 standardLost', dn9.standardLost, 130000); eq('don9 betterStandard', dn9
 // 10: 정치자금만이면 표준세액공제와 같이 받음
 eq('don10 pol standard', C.donationCredit({ gross: 5e7, political: 100000 }).standardLost, 0);
 
+// 주택자금 소득공제 (조특법 제87조②⑤, 소득세법 제52조④⑤⑥, 2026년 귀속)
+// 1: 총급여 5천만 무주택 세대주, 청약 240만·전세대출 원리금 600만·주담대 이자 900만(15년 이상 고정+비거치)
+//    청약 96만 + 임차 240만 = 336만(≤400만), 이자 900만 → 1,236만 ≤ 한도 2천만. 근로소득금액 3,775만 안
+var hd1 = C.housingDeduction({ gross: 5e7, status: 'head', deposit: 2.4e6, rentRepay: 6e6, interest: 9e6, loanType: 'fixedAmort15' });
+eq('hd1 sub', hd1.sub, 960000); eq('hd1 rent', hd1.rent, 2400000); eq('hd1 mort', hd1.mort, 9000000); eq('hd1 total', hd1.total, 12360000); eq('hd1 earned', hd1.earned, 37750000);
+// 2: 청약 300만(120만) + 임차 1천만(400만) = 520만 → 400만 한도, 초과 120만. 주담대 없음
+var hd2 = C.housingDeduction({ gross: 6e7, status: 'head', deposit: 3e6, rentRepay: 1e7 });
+eq('hd2 subRent', hd2.subRent, 4000000); eq('hd2 over', hd2.subRentOver, 1200000); eq('hd2 total', hd2.total, 4000000);
+// 3: 총급여 8천만이면 청약 공제 없음. 10년 이상 15년 미만 고정금리 이자 700만 → 한도 600만
+var hd3 = C.housingDeduction({ gross: 8e7, status: 'head', deposit: 3e6, interest: 7e6, loanType: 'either10' });
+eq('hd3 subOk', hd3.subOk, false); eq('hd3 sub', hd3.sub, 0); eq('hd3 cap', hd3.cap, 6000000); eq('hd3 total', hd3.total, 6000000); eq('hd3 capOver', hd3.capOver, 1000000);
+// 4: 1주택 세대주는 주담대 이자만. 1,900만 → 15년 이상 고정 또는 비거치 1,800만 한도
+var hd4 = C.housingDeduction({ gross: 5e7, status: 'oneHouse', deposit: 3e6, rentRepay: 5e6, interest: 1.9e7, loanType: 'either15' });
+eq('hd4 sub', hd4.sub, 0); eq('hd4 rent', hd4.rent, 0); eq('hd4 total', hd4.total, 18000000);
+// 5: 세대원(세대주가 안 받음): 청약 불가, 개인 차입 원리금 300만(총급여 4천만 ≤ 5천만) 120만 + 이자 500만(15년 이상 그 밖, 800만) = 620만. 실거주 아니면 이자 빠짐
+var hd5 = C.housingDeduction({ gross: 4e7, status: 'member', deposit: 3e6, rentRepay: 3e6, rentPrivate: true, interest: 5e6, loanType: 'other15' });
+eq('hd5 sub', hd5.sub, 0); eq('hd5 rent', hd5.rent, 1200000); eq('hd5 total', hd5.total, 6200000);
+eq('hd5 noLiveIn', C.housingDeduction({ gross: 4e7, status: 'member', rentRepay: 3e6, rentPrivate: true, interest: 5e6, loanType: 'other15', liveIn: false }).total, 1200000);
+eq('hd5 private over', C.housingDeduction({ gross: 5.5e7, status: 'head', rentRepay: 3e6, rentPrivate: true }).rent, 0);
+// 6: 총급여 600만 → 근로소득금액 600 − 390 = 210만. 이자 500만이라도 210만까지만 (제52조⑧)
+var hd6 = C.housingDeduction({ gross: 6e6, status: 'head', interest: 5e6, loanType: 'fixedAmort15' });
+eq('hd6 earned', hd6.earned, 2100000); eq('hd6 total', hd6.total, 2100000); eq('hd6 incomeCapped', hd6.incomeCapped, true);
+// 7: 청약 100만 넣은 사람이 200만 더 넣으면 공제 40만 → 120만, +80만. 임차 원리금 1천만이 있으면 이미 400만 한도라 +0
+var hr1 = C.housingSubRoom({ gross: 5e7, status: 'head', deposit: 1e6 });
+eq('hr1 more', hr1.more, 2000000); eq('hr1 gain', hr1.gain, 800000);
+eq('hr2 gain', C.housingSubRoom({ gross: 5e7, status: 'head', deposit: 1e6, rentRepay: 1e7 }).gain, 0);
+// 8: 2주택 이상 세대는 모두 0
+eq('hd8 multi', C.housingDeduction({ gross: 5e7, status: 'multi', deposit: 3e6, rentRepay: 5e6, interest: 1e7, loanType: 'fixedAmort15' }).total, 0);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

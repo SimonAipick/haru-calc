@@ -979,6 +979,48 @@
     return { head, sp, spBase, cut: Math.max(0, (o.sp.rent || 0) - spBase), refund: head.refund + sp.refund };
   }
 
+  // 주택자금 소득공제 (2026년 귀속, 2026-11-21 law.go.kr 원문 확인)
+  // 조특법 제87조②⑤ (법률 제21467호 판): 총급여 7천만원 이하, 해당 과세기간 중 무주택 세대의 세대주 또는 세대주의 배우자(2025년 납입분부터),
+  //   주택청약종합저축 납입액 연 300만원 한도의 40%, 2028-12-31까지. ⑤ 청약 + 임차 원리금 공제 합계 400만원, 청약 + 임차 + 장기 이자 합계는 장기 한도
+  // 소득세법 제52조④ (법률 제21221호 판): 과세기간 종료일 무주택 세대의 세대주(세대주가 ④⑤·87②를 안 받으면 세대원), 국민주택규모 주택,
+  //   주택임차자금 차입금 원리금 상환액의 40%, 청약 공제와 합쳐 400만원 한도. 시행령 제112조④: 대출기관 차입(입주일·전입일 중 빠른 날 전후 3개월,
+  //   임대인 계좌 직접 입금) 또는 개인 차입(총급여 5천만원 이하, 전후 1개월, 법정 이자율 이상)
+  // 소득세법 제52조⑤⑥: 무주택 또는 1주택 세대의 세대주(세대주가 안 받으면 실제 거주하는 세대원), 취득 당시 기준시가 6억원 이하(2024-01-01 이후 취득,
+  //   법률 제19933호 부칙 제16조① 그 전 취득은 종전 기준), 장기주택저당차입금 이자 상환액 전액. 한도: 상환기간 15년 이상 고정금리 + 비거치식 2천만원,
+  //   15년 이상 고정 또는 비거치 1,800만원, 15년 이상 그 밖 800만원, 10년 이상 15년 미만 고정 또는 비거치 600만원
+  //   (부칙 제16조②: 2024-01-01 이후 지급하는 이자부터 차입 시기와 관계없이 적용). ⑧ 공제액은 종합소득금액(근로소득금액)을 넘지 못함
+  const HOUSING = { subGrossMax: 7000 * MAN, subCap: 300 * MAN, subRate: 0.4, rentRate: 0.4, rentPrivateGrossMax: 5000 * MAN,
+    rentSubCap: 400 * MAN, mortgageCaps: { fixedAmort15: 2000 * MAN, either15: 1800 * MAN, other15: 800 * MAN, either10: 600 * MAN, none: 0 } };
+  // o: { gross, status('head' 무주택 세대주 | 'spouse' 무주택 세대주의 배우자 | 'member' 무주택 세대의 다른 세대원 | 'oneHouse' 1주택 세대주 | 'multi' 2주택 이상),
+  //      deposit(청약저축 올해 납입액), rentRepay(주택임차차입금 올해 원리금 상환액), rentPrivate(개인에게 빌렸으면 true),
+  //      interest(장기주택저당차입금 올해 이자 상환액), loanType(mortgageCaps 키), liveIn(세대원이 그 집에 실제 거주, 기본 true) }
+  function housingDeduction(o) {
+    const g = Math.max(0, o.gross || 0), st = o.status || 'head';
+    const earned = Math.max(0, g - earnedIncomeDeduction(g));
+    const subOk = (st === 'head' || st === 'spouse') && g <= HOUSING.subGrossMax && g > 0;
+    const rentOk = (st === 'head' || st === 'spouse' || st === 'member') && (!o.rentPrivate || g <= HOUSING.rentPrivateGrossMax);
+    const mortOk = st !== 'multi' && (st === 'head' || st === 'oneHouse' || o.liveIn !== false);
+    const loanCap = HOUSING.mortgageCaps[o.loanType] || 0;
+    const deposit = Math.max(0, o.deposit || 0), rentRepay = Math.max(0, o.rentRepay || 0), interest = Math.max(0, o.interest || 0);
+    const sub = subOk ? Math.floor(Math.min(deposit, HOUSING.subCap) * HOUSING.subRate) : 0;
+    const rent = rentOk ? Math.floor(rentRepay * HOUSING.rentRate) : 0;
+    const subRent = Math.min(sub + rent, HOUSING.rentSubCap);
+    const mort = mortOk && loanCap > 0 ? interest : 0;
+    const raw = subRent + mort;
+    const cap = mort > 0 ? loanCap : HOUSING.rentSubCap;
+    const capped = Math.min(raw, cap);
+    const total = Math.min(capped, earned);
+    return { earned, subOk, rentOk, mortOk, loanCap, sub, rent, subRent, subRentOver: Math.max(0, sub + rent - HOUSING.rentSubCap),
+      mort, raw, cap, capOver: Math.max(0, raw - cap), incomeCapped: capped > earned, total };
+  }
+  // 청약저축을 12월 안에 더 넣으면 늘어나는 공제: 300만원 한도까지 채웠을 때와의 차이
+  function housingSubRoom(o) {
+    const now = housingDeduction(o);
+    const more = now.subOk ? Math.max(0, HOUSING.subCap - Math.max(0, o.deposit || 0)) : 0;
+    const after = more > 0 ? housingDeduction(Object.assign({}, o, { deposit: HOUSING.subCap })) : now;
+    return { more, gain: after.total - now.total };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -996,6 +1038,7 @@
     HOMETOWN, hometownCredit,
     DONATION, donationCredit,
     RENT, rentRate, rentYearAmount, rentCredit, rentCouple,
+    HOUSING, housingDeduction, housingSubRoom,
     comma, won, korean,
   };
 
