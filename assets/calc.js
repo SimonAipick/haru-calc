@@ -1021,6 +1021,65 @@
     return { more, gain: after.total - now.total };
   }
 
+  // ---------- 해외주식 양도소득세 ----------
+  // 소득세법 제94조①3호다목(외국법인 발행·해외 상장 주식, 시행령 제157조의3), 제98조(양도시기 = 대금 청산일 → 결제일),
+  //   제102조①2호(국내 과세 대상 주식과 하나의 소득으로 손익통산), 제103조①2호(기본공제 연 250만원 한 번), 제104조①12호(20%, 중소기업 10%),
+  //   제105조①(제3호다목은 예정신고 없음), 제110조(확정신고 다음 해 5월), 제112조·시행령 제175조(1천만원 초과 분납: 2천만원 이하 1천만원 초과분, 초과 50% 이하),
+  //   시행령 제162조⑤(취득시기 불분명하면 선입선출). 지방세법 제103조의3①12호(개인지방소득세 과세표준의 2%, 중소기업 1%).
+  //   국세청 '2025년 신고안내 해외주식과 세금': 양도가액은 양도대금 입금일, 취득가액·수수료는 출금일의 기준환율·재정환율(서울외국환중개), 증권사 자료는 매수·매도 결제일 환율.
+  //   국세기본법 제47조의2(무신고 20%), 제47조의4·시행령 제27조의4(납부지연 1일 10만분의 22). 국고금 관리법 제47조(10원 미만 버림).
+  //   조특법 제91조의26·시행령 제93조의12(2026년 한시 국내시장복귀계좌: 2025-12-23 이전 보유 해외상장주식을 계좌(납입한도 5천만원)로 2026-12-31까지 양도,
+  //   양도소득금액 × 1/1~5/31 100%, 6/1~7/31 80%, 8/1~12/31 50% × 조정비율(2026년 중 다른 해외주식·해외지수 ETF 취득 시 줄어듦, 여기서는 1로 가정),
+  //   기본공제 뒤 금액 범위에서 공제).
+  const FSTOCK = { deduction: 250 * MAN, rate: 0.2, smeRate: 0.1, localRatio: 0.1, splitMin: 1000 * MAN, riaCap: 5000 * MAN,
+    riaRates: [['2026-01-01', '2026-05-31', 1], ['2026-06-01', '2026-07-31', 0.8], ['2026-08-01', '2026-12-31', 0.5]],
+    noFilePenalty: 0.2, latePenaltyDaily: 0.00022 };
+  function trunc10(n) { return Math.floor(Math.max(0, n) / 10) * 10; }
+  // 한 종목(한 번의 매수·매도)의 원화 양도차익. o: { qty, buyPrice, sellPrice(외화 단가), buyRate, sellRate(각 결제일 환율), feePct(매수·매도 각 수수료율 %) }
+  function foreignTrade(o) {
+    const qty = Math.max(0, o.qty || 0), fee = Math.max(0, o.feePct || 0) / 100;
+    const buyRate = o.buyRate || 0, sellRate = o.sellRate || buyRate;
+    const proceeds = qty * (o.sellPrice || 0) * sellRate, cost = qty * (o.buyPrice || 0) * buyRate;
+    const fees = proceeds * fee + cost * fee;
+    const gain = proceeds - cost - fees;
+    // 주가 효과(매수 환율로 환산한 외화 차익)와 환율 효과(매도 금액에 대한 환율 변동)로 나눠 보여 준다
+    const priceGain = qty * ((o.sellPrice || 0) - (o.buyPrice || 0)) * buyRate;
+    const fxGain = qty * (o.sellPrice || 0) * (sellRate - buyRate);
+    return { proceeds, cost, fees, gain, priceGain, fxGain, foreignGain: qty * ((o.sellPrice || 0) - (o.buyPrice || 0)) };
+  }
+  // 올해 세금. o: { gain(해외주식 확정 차익 합계), loss(확정 손실 합계, 양수), domestic(과세 대상 국내주식 양도소득, 손실이면 음수),
+  //               riaGain(국내시장복귀계좌로 판 종목의 양도소득금액), riaRate(공제율, 기본 0.5), sme(해외 상장 중소 내국법인 주식이면 true) }
+  function foreignStockTax(o) {
+    const gain = Math.max(0, o.gain || 0), loss = Math.max(0, o.loss || 0), domestic = o.domestic || 0;
+    const stock = gain - loss;                       // 해외주식 양도소득금액(손실이면 음수)
+    const total = stock + domestic;                  // 국내 과세 대상 주식과 통산
+    const taxable = Math.max(0, total);
+    const deductionUsed = Math.min(FSTOCK.deduction, taxable);
+    const base0 = taxable - deductionUsed;
+    const riaRate = o.riaRate == null ? 0.5 : o.riaRate;
+    const riaDed = Math.min(Math.max(0, o.riaGain || 0) * riaRate, base0);
+    const base = base0 - riaDed;
+    const rate = o.sme ? FSTOCK.smeRate : FSTOCK.rate;
+    const national = trunc10(base * rate), local = trunc10(base * rate * FSTOCK.localRatio);
+    const tax = national + local;
+    return { stock, total, taxable, deductionUsed, base0, riaDed, base, rate, national, local, tax,
+      effective: total > 0 ? tax / total : 0,
+      room: Math.max(0, FSTOCK.deduction - taxable),           // 세금 없이 더 실현할 수 있는 이익
+      lossToZero: base > 0 ? base : 0,                          // 손실을 이만큼 실현하면 세금 0
+      split: national > FSTOCK.splitMin, splitAmount: national > FSTOCK.splitMin ? (national <= 2 * FSTOCK.splitMin ? national - FSTOCK.splitMin : Math.floor(national / 2)) : 0,
+      noFilePenalty: trunc10(national * FSTOCK.noFilePenalty), latePenalty30: trunc10(national * FSTOCK.latePenaltyDaily * 30) };
+  }
+  // 연말 전략: 아직 안 판 종목의 평가이익·평가손실을 얼마나 실현하면 좋은지
+  function foreignStockPlan(o) {
+    const now = foreignStockTax(o);
+    const unrealGain = Math.max(0, o.unrealGain || 0), unrealLoss = Math.max(0, o.unrealLoss || 0);
+    const sellGain = Math.min(unrealGain, now.room);                                  // 비과세 범위 안에서 익절
+    const sellLoss = Math.min(unrealLoss, now.lossToZero);                             // 세금 0이 되게 손절
+    const afterLoss = foreignStockTax(Object.assign({}, o, { loss: (o.loss || 0) + sellLoss }));
+    const afterAll = foreignStockTax(Object.assign({}, o, { loss: (o.loss || 0) + unrealLoss, gain: (o.gain || 0) + unrealGain }));
+    return { now, sellGain, sellLoss, saveByLoss: now.tax - afterLoss.tax, afterLoss, afterAll, per100: trunc10(100 * MAN * (o.sme ? FSTOCK.smeRate : FSTOCK.rate) * (1 + FSTOCK.localRatio)) };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -1039,6 +1098,7 @@
     DONATION, donationCredit,
     RENT, rentRate, rentYearAmount, rentCredit, rentCouple,
     HOUSING, housingDeduction, housingSubRoom,
+    FSTOCK, foreignTrade, foreignStockTax, foreignStockPlan,
     comma, won, korean,
   };
 

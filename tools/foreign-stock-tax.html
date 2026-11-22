@@ -1,0 +1,178 @@
+<!--
+{"slug": "foreign-stock-tax", "title": "해외주식 양도소득세 계산기", "category": "금융", "order": 13,
+ "short": "250만원 공제·22%, 연말 손익통산 전략",
+ "description": "올해 결제된 해외주식(미국 주식·ETF 등) 양도차익과 양도차손을 넣으면 250만원 기본공제를 뺀 양도소득세 20%와 지방소득세 2%를 계산합니다. 세금 없이 더 팔 수 있는 이익, 손실 종목을 얼마나 팔면 세금이 0이 되는지, 달러 매수·매도가와 결제일 환율로 원화 차익 환산, 분납·가산세, 2026년 한시 국내시장복귀계좌 공제까지 보여 줍니다.",
+ "lead": "해외주식은 1년 치 차익과 손실을 합쳐 250만원을 넘는 부분에 22%를 내고, 다음 해 5월에 직접 신고합니다. 12월 안에 손실 종목을 정리하거나 250만원 안에서 익절하면 세금이 줄어듭니다."}
+-->
+<!-- 근거 (2026-11-22 law.go.kr 원문 + 국세청 안내 확인):
+     소득세법 (법률 제21221호 판, 시행 2026. 7. 1.) https://www.law.go.kr/법령/소득세법
+       제94조①3호다목: 외국법인이 발행하였거나 외국 시장에 상장된 주식등(시행령 제157조의3: 외국법인 주식(국내 상장 제외), 해외 상장 내국법인 주식·DR)
+       제98조: 양도·취득 시기 = 대금을 청산한 날 (→ 결제일), 시행령 제162조⑤ 취득시기 불분명하면 선입선출
+       제102조①2호: 제94조①3호 소득(국내 과세 대상 주식 + 국외 주식)을 하나로 계산, ② 양도차손 공제(시행령 제167조의2)
+       제103조①2호: 양도소득 기본공제 연 250만원 (주식 소득 전체에 한 번)
+       제104조①12호: 제94조①3호다목 자산 세율 — 중소기업 주식 10%, 그 밖 20%
+       제105조①: 예정신고 대상에서 제3호다목 제외 (해외주식은 예정신고 없음), 제110조①: 확정신고 다음 해 5월 1일~31일
+       제112조·시행령 제175조: 납부세액 1천만원 초과 시 2개월 안 분납 (2천만원 이하는 1천만원 초과분, 2천만원 초과는 50% 이하)
+       제118조의6: 외국납부세액공제
+     지방세법 제103조의3①12호 (법률 제21308호 판): 제94조①3호다목 자산 — 중소기업 1천분의 10, 그 밖 1천분의 20 https://www.law.go.kr/법령/지방세법/제103조의3
+     국세기본법 제47조의2①2호 무신고 20%, 제47조의4①·시행령 제27조의4① 납부지연 1일 10만분의 22
+     국고금 관리법 제47조: 10원 미만 버림
+     조세특례제한법 제91조의26 (2026. 4. 21. 신설)·시행령 제93조의12 (2026. 5. 14. 신설): 국내시장복귀계좌 — 2025-12-23 이전 보유 국외상장주식을
+       납입한도 5천만원 계좌로 2026-12-31까지 양도, 양도소득금액 × (1/1~5/31 100%, 6/1~7/31 80%, 8/1~12/31 50%) × 조정비율(시행령 ④, 산식은 그림)을
+       기본공제 뒤 금액 범위에서 공제, 납입 후 1년 안 인출 시 추징 + 이자상당액. 제91조의27: 환헤지 상품 투자액 5% 공제(500만원 한도)
+     국세청 '2025년 신고안내 해외주식과 세금(개인투자자용)' https://taxlaw.nts.go.kr/downloadPDFFile.do?fleId=300000000001047678&fleSn=923559
+       8쪽 예정신고 없이 확정신고만, 11쪽 국내·국외주식 통산 250만원, 세율 20%(해외상장 중소 내국법인 10%), 13쪽 통산 사례,
+       14쪽 선입선출(증권사 이동평균법 가능), 양도가액은 양도대금 입금일·필요경비는 출금일의 기준환율·재정환율(서울외국환중개 www.smbs.biz), 16쪽 증권사 계산보조자료는 매수·매도 결제일 환율
+     국세청 주식등 양도소득세 과세대상 https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=8800 (2020. 1. 1. 이후 국내·해외주식 손익통산, 사례)
+     미국 주식 T+1 결제(2024-05-28 시행): 한국예탁결제원 보도(https://biz.sbs.co.kr/article/20000171633). 연말 마지막 귀속 매도일은 증권사 공지로 확인 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>올해 결제된 해외주식 손익 <small>증권사 앱의 '해외주식 양도소득' 또는 '실현손익' 화면에서 원화 금액을 보고 넣으세요</small></legend>
+    <div class="grid2">
+      <label>이익 난 거래의 양도차익 합계 <small>수수료를 뺀 원화 금액</small><input class="money" id="gain" inputmode="numeric" placeholder="예: 8,000,000"></label>
+      <label>손실 난 거래의 양도차손 합계 <small>마이너스 기호 없이 금액만</small><input class="money" id="loss" inputmode="numeric" placeholder="예: 3,000,000"></label>
+    </div>
+    <details class="more">
+      <summary>국내주식 과세분, 국내시장복귀계좌, 중소기업 주식이 있으면 열어 주세요</summary>
+      <div class="grid2">
+        <label>과세 대상 국내주식 양도차익 <small>대주주이거나 장외에서 판 경우만. 일반 국내 상장주식 매매는 비과세라 넣지 않음</small><input class="money" id="domGain" inputmode="numeric" placeholder="보통 비워 둠"></label>
+        <label>과세 대상 국내주식 양도차손 <small>위와 같은 조건의 손실</small><input class="money" id="domLoss" inputmode="numeric" placeholder="보통 비워 둠"></label>
+      </div>
+      <label>국내시장복귀계좌(RIA)로 8월 1일 이후 판 종목의 양도차익 <small>2026년 한시. 위 양도차익 합계에 포함된 금액 중 RIA 계좌로 판 부분</small><input class="money" id="riaGain" inputmode="numeric" placeholder="해당 없으면 비워 둠"></label>
+      <label class="check"><input type="checkbox" id="sme"> 판 주식이 해외에 상장된 국내 중소기업 주식이다 (세율 10%+1%. 미국·일본 등 외국 회사 주식은 해당 없음)</label>
+    </details>
+  </fieldset>
+  <fieldset>
+    <legend>아직 안 판 종목 <small>12월 안에 팔지 말지 정할 때. 없으면 비워 두세요</small></legend>
+    <div class="grid2">
+      <label>이익 중인 종목의 평가이익 합계 <small>지금 팔면 생기는 원화 차익</small><input class="money" id="unrealGain" inputmode="numeric" placeholder="예: 2,000,000"></label>
+      <label>손실 중인 종목의 평가손실 합계 <small>지금 팔면 생기는 원화 손실</small><input class="money" id="unrealLoss" inputmode="numeric" placeholder="예: 6,000,000"></label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>한 종목 원화 차익 환산 <small>달러 단가와 결제일 환율로 직접 계산해 보고 싶을 때</small></legend>
+    <div class="grid2">
+      <label>수량 <small>주</small><input type="number" id="qty" min="0" step="1" inputmode="numeric" placeholder="예: 10"></label>
+      <label>매수·매도 수수료율 <small>% (증권사 기준, 보통 0.07~0.25)</small><input type="number" id="feePct" min="0" step="0.01" inputmode="decimal" placeholder="예: 0.25"></label>
+      <label>매수 단가 <small>달러 등 외화</small><input type="number" id="buyPrice" min="0" step="0.01" inputmode="decimal" placeholder="예: 200"></label>
+      <label>매도 단가 <small>외화</small><input type="number" id="sellPrice" min="0" step="0.01" inputmode="decimal" placeholder="예: 300"></label>
+      <label>매수 결제일 환율 <small>원/달러 기준환율</small><input type="number" id="buyRate" min="0" step="0.01" inputmode="decimal" placeholder="예: 1,350"></label>
+      <label>매도 결제일 환율 <small>원/달러 기준환율</small><input type="number" id="sellRate" min="0" step="0.01" inputmode="decimal" placeholder="예: 1,400"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="addTrade"> 이 거래를 올해 확정 손익에 더해서 세금 계산</label>
+  </fieldset>
+  <button type="submit">해외주식 세금 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  UI.bind('f', 'out', function () {
+    const F = Calc.FSTOCK;
+    const qty = UI.num('qty'), buyPrice = UI.num('buyPrice'), sellPrice = UI.num('sellPrice'), buyRate = UI.num('buyRate'), sellRate = UI.num('sellRate');
+    const hasTrade = qty > 0 && buyPrice > 0 && sellPrice > 0 && buyRate > 0;
+    const trade = hasTrade ? Calc.foreignTrade({ qty: qty, buyPrice: buyPrice, sellPrice: sellPrice, buyRate: buyRate, sellRate: sellRate || buyRate, feePct: UI.num('feePct') }) : null;
+    let gain = UI.num('gain'), loss = UI.num('loss');
+    const addTrade = hasTrade && UI.$('addTrade').checked;
+    if (addTrade) { if (trade.gain >= 0) gain += trade.gain; else loss += -trade.gain; }
+    const o = { gain: gain, loss: loss, domestic: UI.num('domGain') - UI.num('domLoss'), riaGain: UI.num('riaGain'), sme: UI.$('sme').checked,
+      unrealGain: UI.num('unrealGain'), unrealLoss: UI.num('unrealLoss') };
+    if (!gain && !loss && !o.domestic && !trade) return null;
+    const rows = [], notes = [];
+    if (trade) {
+      rows.push(['[한 종목] 원화 양도차익', Calc.won(trade.gain) + ' <small>(양도가액 ' + Calc.won(trade.proceeds) + ' − 취득가액 ' + Calc.won(trade.cost) + ' − 수수료 ' + Calc.won(trade.fees) + ')</small>']);
+      rows.push(['[한 종목] 주가 효과 / 환율 효과', Calc.won(trade.priceGain) + ' / ' + Calc.won(trade.fxGain)]);
+      if (!addTrade) notes.push('이 거래만 따로 본 금액입니다. 올해 세금에 넣으려면 위 체크박스를 켜세요. 달러 차익 ' + trade.foreignGain.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '달러를 결제일 환율로 바꾼 값이라, 증권사 자료와 환율 소수점 차이로 몇백 원 다를 수 있습니다.');
+    }
+    if (!gain && !loss && !o.domestic) return UI.result(['이 거래의 원화 양도차익', Calc.won(trade.gain)], rows, notes);
+    const r = Calc.foreignStockTax(o), plan = Calc.foreignStockPlan(o);
+    const rateLabel = o.sme ? '10%' : '20%', localLabel = o.sme ? '1%' : '2%';
+    rows.push(['해외주식 양도소득금액 (이익 − 손실)', Calc.won(r.stock)]);
+    if (o.domestic) rows.push(['국내 과세 대상 주식과 통산한 금액', Calc.won(r.total)]);
+    rows.push(['기본공제 (연 250만원)', '− ' + Calc.won(r.deductionUsed)]);
+    if (r.riaDed > 0) rows.push(['국내시장복귀계좌 공제 (8~12월 매도 50%)', '− ' + Calc.won(r.riaDed)]);
+    rows.push(['과세표준', Calc.won(r.base)], ['양도소득세 ' + rateLabel, Calc.won(r.national)], ['지방소득세 ' + localLabel, Calc.won(r.local)],
+      ['낼 세금 합계', '<strong>' + Calc.won(r.tax) + '</strong>' + (r.total > 0 ? ' <small>(양도소득금액의 ' + (r.effective * 100).toFixed(1) + '%)</small>' : '')]);
+    if (r.total < 0) notes.push('올해는 손실이 ' + Calc.won(-r.total) + ' 더 많아 세금이 없습니다. 이 손실은 내년으로 넘어가지 않으니, 이익 중인 종목이 있으면 12월 안에 팔아 손실과 상계하는 것이 유리합니다. 지금 ' + Calc.won(-r.total + F.deduction) + '까지 이익을 실현해도 세금이 0입니다.');
+    else if (r.room > 0) notes.push('기본공제 250만원까지 ' + Calc.won(r.room) + ' 남았습니다. 이익 중인 종목을 이 금액 안에서 팔면 세금 없이 수익을 확정할 수 있습니다(12월 31일까지 결제되어야 올해분).');
+    if (r.base > 0) notes.push('손실 중인 종목을 ' + Calc.won(r.lossToZero) + ' 어치 손절하면 과세표준이 0이 되어 세금 ' + Calc.won(r.tax) + '이 전부 사라집니다. 같은 종목을 다시 사도 됩니다(손익은 결제 기준으로 확정).');
+    if (o.unrealLoss > 0 && plan.sellLoss > 0) rows.push(['평가손실 중 ' + Calc.won(plan.sellLoss) + ' 손절하면', '세금 ' + Calc.won(plan.now.tax) + ' → ' + Calc.won(plan.afterLoss.tax) + ' (' + Calc.won(plan.saveByLoss) + ' ↓)']);
+    if (o.unrealGain > 0) {
+      if (plan.sellGain > 0) rows.push(['평가이익 중 ' + Calc.won(plan.sellGain) + '까지 익절하면', '세금 변화 없음 (공제 안)']);
+      rows.push(['이익·손실 종목을 전부 팔면', '세금 ' + Calc.won(plan.afterAll.tax)]);
+      notes.push('이익을 100만원 더 실현할 때마다 세금이 약 ' + Calc.won(plan.per100) + ' 늘어납니다. 내년 1월에 팔면 내년 250만원 공제를 새로 쓸 수 있습니다.');
+    }
+    if (r.split) notes.push('양도소득세가 1천만원을 넘어 ' + Calc.won(r.splitAmount) + '은 신고기한 뒤 2개월 안에 나눠 낼 수 있습니다(지방소득세는 별도).');
+    if (r.tax > 0) notes.push('신고는 내년 5월 1일~31일 홈택스에서 합니다. 신고를 안 하면 무신고 가산세 ' + Calc.won(r.noFilePenalty) + '(20%)에 하루 0.022%씩 납부지연 가산세(30일이면 ' + Calc.won(r.latePenalty30) + ')가 붙습니다.');
+    if (o.riaGain > 0 && r.riaDed === 0 && r.base0 === 0) notes.push('국내시장복귀계좌 공제는 기본공제를 뺀 뒤 남는 금액 안에서만 적용되어, 지금은 공제할 금액이 없습니다.');
+    if (o.riaGain > 0) notes.push('국내시장복귀계좌 공제는 2026년에 다른 해외주식이나 해외지수 ETF를 새로 사지 않았다고 보고(조정비율 1) 계산했습니다. 새로 샀다면 공제가 줄어듭니다. 계좌에 넣은 돈은 1년 안에 빼면 공제받은 세금에 이자를 더해 다시 냅니다.');
+    notes.push('손익은 체결일이 아니라 결제일 기준입니다. 미국 주식은 체결 다음 영업일에 결제되므로 보통 12월 30일(현지) 매도까지가 올해분이고, 그 뒤 매도는 내년 손익입니다. 정확한 마지막 날은 증권사 공지로 확인하세요.');
+    return UI.result(['올해 낼 해외주식 양도소득세', Calc.won(r.tax)], rows, notes);
+  });
+})();
+</script>
+<!-- guide -->
+<h2>해외주식 세금은 이렇게 계산합니다</h2>
+<p>미국·일본·홍콩 등 해외 시장에 상장된 주식과 ETF를 팔아 번 돈은 양도소득세 대상입니다. 국내 상장주식(소액주주, 장내 거래)은 비과세지만 해외주식은 차익이 250만원만 넘어도 세금이 생기고, 증권사가 대신 떼 주지 않아 다음 해 5월에 본인이 신고해야 합니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>단계</th><th>계산</th><th>근거</th></tr></thead>
+  <tbody>
+    <tr><td>양도차익</td><td>매도금액(매도 결제일 환율) − 매수금액(매수 결제일 환율) − 매수·매도 수수료</td><td>소득세법 제94조·제98조</td></tr>
+    <tr><td>양도소득금액</td><td>1월 1일~12월 31일 결제된 모든 거래의 차익과 손실을 합산</td><td>제102조</td></tr>
+    <tr><td>과세표준</td><td>양도소득금액 − 기본공제 250만원 (1년에 한 번)</td><td>제103조</td></tr>
+    <tr><td>세금</td><td>과세표준 × 20% + 지방소득세 2% = <strong>22%</strong></td><td>제104조①12호, 지방세법 제103조의3</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="formula">세금 = (올해 결제된 차익 합계 − 손실 합계 − 250만원) × 22%</p>
+<p>보유 기간이 길어도 세율은 같고 장기보유 공제도 없습니다. 손실이 더 크면 세금은 0이지만 남은 손실은 내년으로 넘어가지 않습니다. 해외에 상장된 국내 중소기업 주식만 세율이 10%(지방소득세 포함 11%)이고, 미국·일본 등 외국 회사 주식은 회사 규모와 관계없이 20%입니다.</p>
+
+<h2>환율은 결제일 기준, 연도도 결제일 기준</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>구분</th><th>적용 환율</th></tr></thead>
+  <tbody>
+    <tr><td>매도금액(양도가액)</td><td>매도 대금이 계좌에 들어오는 날(결제일)의 기준환율·재정환율</td></tr>
+    <tr><td>매수금액·수수료(필요경비)</td><td>돈이 나간 날(결제일)의 환율. 여러 번 나눠 샀으면 각각 그 날 환율</td></tr>
+  </tbody>
+</table>
+</div>
+<p>국세청 안내와 증권사 계산 자료 모두 이 방식을 씁니다. 그래서 주가가 그대로여도 환율이 오르면 원화 차익이 생기고(환차익도 과세), 환율이 내리면 차익이 줄어듭니다. 환전을 언제 했는지는 관계없습니다. 같은 종목을 여러 번 샀다면 먼저 산 것을 먼저 판 것으로 보고(선입선출) 계산하며, 증권사에 따라 이동평균법을 쓰기도 합니다.</p>
+<p>어느 해 소득인지도 체결일이 아니라 <strong>결제일</strong>로 정합니다. 미국 주식은 2024년 5월 말부터 체결 다음 영업일(T+1)에 결제되므로, 보통 현지 12월 30일까지 판 것이 올해분이고 12월 31일에 판 것은 다음 해 1월 결제라 내년 소득입니다. 연말에 세금 때문에 파는 거래라면 증권사가 공지하는 '올해 귀속 마지막 매도일'을 꼭 확인하세요.</p>
+
+<h2>12월에 할 수 있는 세 가지</h2>
+<ul>
+  <li><strong>250만원 안에서 익절:</strong> 올해 차익이 250만원에 못 미치면 그 차이만큼은 세금 없이 수익을 확정할 수 있습니다. 공제는 해마다 새로 생기니 큰 이익은 연도를 나눠 파는 것이 유리합니다.</li>
+  <li><strong>손실 종목 정리(손익통산):</strong> 올해 차익이 250만원을 넘으면 손실 중인 종목을 팔아 차익을 줄일 수 있습니다. 팔고 나서 같은 종목을 다시 사도 손실은 그대로 인정됩니다(국내에는 미국 같은 재매수 제한 규정이 없습니다). 다만 다시 살 때 수수료와 환율 차이는 생깁니다.</li>
+  <li><strong>국내주식과도 통산:</strong> 2020년부터는 과세 대상인 국내주식(대주주, 장외 거래) 손익과 해외주식 손익을 합쳐 계산하고 250만원 공제도 합쳐서 한 번만 받습니다. 일반 소액주주의 국내 상장주식 매매는 비과세라서 통산 대상이 아닙니다.</li>
+</ul>
+
+<h2>예시: 올해 이익 1,200만원, 손실 300만원인 투자자</h2>
+<p>이익 종목 차익 1,200만원에서 손실 300만원을 빼면 양도소득금액 900만원, 기본공제 250만원을 빼면 과세표준 650만원입니다. 양도소득세 130만원과 지방소득세 13만원, 합쳐 <strong>143만원</strong>을 내년 5월에 냅니다. 평가손실 400만원짜리 종목을 12월 안에 팔면 과세표준이 250만원으로 줄어 세금은 55만원이 되고, 88만원을 아낍니다.</p>
+
+<h2>예시: 10주를 200달러에 사서 300달러에 판 경우</h2>
+<p>매수 결제일 환율 1,350원, 매도 결제일 환율 1,400원, 수수료 0.25%라면 매도금액 420만원, 매수금액 270만원, 수수료 1만 7,250원으로 원화 차익은 <strong>148만 2,750원</strong>입니다. 이 가운데 주가가 올라 번 돈은 135만원, 환율이 올라 번 돈은 15만원입니다. 올해 다른 거래가 없다면 250만원 안이라 세금은 0이지만, 확정신고는 해 두는 것이 안전합니다.</p>
+
+<h2>2026년만 있는 두 가지 공제</h2>
+<ul>
+  <li><strong>국내시장복귀계좌(RIA):</strong> 2025년 12월 23일 이전부터 갖고 있던 해외주식을 이 전용 계좌(납입 한도 5천만원)를 통해 2026년 안에 팔고, 판 돈을 국내 상장주식이나 국내주식형 펀드로 1년 이상 굴리면 그 종목의 양도소득금액 일부를 공제합니다. 5월까지 판 것은 100%, 6~7월은 80%, <strong>8~12월은 50%</strong>입니다. 2026년에 다른 해외주식이나 해외지수 ETF를 새로 샀다면 공제가 그만큼 줄어들고(조정비율), 1년 안에 돈을 빼면 공제받은 세금에 이자를 더해 다시 냅니다. 공제는 기본공제 250만원을 뺀 뒤 남는 금액 안에서만 적용됩니다.</li>
+  <li><strong>환헤지 상품 공제:</strong> 2025년 12월 23일에 갖고 있던 해외주식에 대해 증권사의 환율변동위험회피 상품(장외 파생상품)에 2026년 안에 투자하면 투자액의 5%(500만원 한도)를 양도소득금액에서 공제합니다. 가입 조건이 복잡하니 증권사에 확인하세요.</li>
+</ul>
+
+<h2>자주 묻는 질문</h2>
+<h3>증권사가 알아서 떼 가나요?</h3>
+<p>아닙니다. 해외주식 양도소득세는 예정신고 없이 다음 해 5월 1일~31일에 홈택스에서 본인이 확정신고하고 냅니다. 대부분의 증권사가 '양도소득금액 계산보조자료'를 만들어 주고 무료 신고 대행도 해 주니 4월쯤 증권사 앱 공지를 확인하세요. 여러 증권사에서 거래했으면 전부 합쳐서 한 번에 신고해야 합니다.</p>
+<h3>차익이 250만원 이하면 신고 안 해도 되나요?</h3>
+<p>낼 세금은 0이지만 양도소득이 있으면 신고 대상입니다. 세금이 0인 경우에는 안 해도 가산세가 없지만, 나중에 자료 소명을 요구받을 수 있으니 증권사 대행으로라도 해 두는 것이 깔끔합니다. 세금이 있는데 안 내면 세금의 20% 무신고 가산세와 하루 0.022%씩 납부지연 가산세가 붙습니다.</p>
+<h3>국내에 상장된 미국 지수 ETF도 같은가요?</h3>
+<p>다릅니다. 국내 증시에 상장된 해외 지수 ETF(예: 코스피에 상장된 S&amp;P500 ETF)의 매매 차익은 양도소득이 아니라 배당소득으로 보아 15.4%를 원천징수하고, 다른 금융소득과 합쳐 2천만원을 넘으면 종합과세됩니다. 미국 증시에 상장된 ETF는 이 계산기의 양도소득세 대상입니다. 배당금은 해외·국내 모두 배당소득입니다.</p>
+<h3>1년 넘게 보유하면 세율이 낮아지나요?</h3>
+<p>아닙니다. 보유 기간과 관계없이 20%(지방소득세 포함 22%)이고, 미국처럼 장기 보유 우대 세율이 없습니다. 대신 해마다 250만원 공제가 새로 생기니 큰 이익은 여러 해에 나눠 실현하는 것이 유리합니다.</p>
+<h3>세금이 많으면 나눠 낼 수 있나요?</h3>
+<p>양도소득세(국세)가 1천만원을 넘으면 일부를 신고기한 뒤 2개월 안에 나눠 낼 수 있습니다. 2천만원 이하면 1천만원을 넘는 부분을, 2천만원을 넘으면 절반까지 미룰 수 있습니다. 지방소득세는 따로 지방자치단체에 냅니다.</p>
+<h3>외국에서 세금을 냈어요.</h3>
+<p>대부분의 나라는 조세조약에 따라 거주지(한국)에서만 과세하므로 미국 주식은 현지에서 양도세를 내지 않습니다. 현지에서 적법하게 낸 세금이 있다면 외국납부세액공제를 받거나 필요경비로 뺄 수 있습니다. 또 이 계산기는 국내에 5년 이상 주소나 거소를 둔 거주자를 기준으로 합니다.</p>
+<h3>금융투자소득세는 어떻게 됐나요?</h3>
+<p>2025년부터 시행될 예정이던 금융투자소득세는 2024년 12월 국회에서 폐지되어, 해외주식은 지금처럼 양도소득세 체계(250만원 공제, 22%)가 그대로 유지됩니다.</p>
+<h3>다른 계산기도 보고 싶어요.</h3>
+<p>예금·적금 이자에 붙는 세금은 <a href="../savings-interest/">예금·적금 이자 계산기</a>, 연말에 세금을 줄이는 다른 방법은 <a href="../pension-tax-credit/">연금저축·IRP 세액공제 계산기</a>와 <a href="../card-deduction/">신용카드 소득공제 계산기</a>를 보세요.</p>

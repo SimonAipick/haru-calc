@@ -459,6 +459,47 @@ eq('hr2 gain', C.housingSubRoom({ gross: 5e7, status: 'head', deposit: 1e6, rent
 // 8: 2주택 이상 세대는 모두 0
 eq('hd8 multi', C.housingDeduction({ gross: 5e7, status: 'multi', deposit: 3e6, rentRepay: 5e6, interest: 1e7, loanType: 'fixedAmort15' }).total, 0);
 
+// 해외주식 양도소득세 (소득세법 제94조①3호다목·제102조·제103조·제104조①12호, 지방세법 제103조의3①12호, 조특법 제91조의26)
+// 1: 10주, $100→$150, 환율 1,300→1,400, 수수료 0.25%: 양도가액 2,100,000 − 취득가액 1,300,000 − 수수료 (2,100,000+1,300,000)×0.25% = 8,500 → 791,500
+//    주가 효과 10×50×1,300 = 650,000, 환율 효과 10×150×100 = 150,000 (합 800,000 = 양도가액 − 취득가액)
+var ft1 = C.foreignTrade({ qty: 10, buyPrice: 100, sellPrice: 150, buyRate: 1300, sellRate: 1400, feePct: 0.25 });
+eq('ft1 proceeds', ft1.proceeds, 2100000); eq('ft1 cost', ft1.cost, 1300000); eq('ft1 fees', ft1.fees, 8500); eq('ft1 gain', ft1.gain, 791500);
+eq('ft1 priceGain', ft1.priceGain, 650000); eq('ft1 fxGain', ft1.fxGain, 150000);
+// 2: 10주 $200→$300, 1,350→1,400, 0.25%: 4,200,000 − 2,700,000 − 17,250 = 1,482,750 (250만원 안이라 세금 0)
+eq('ft2 gain', C.foreignTrade({ qty: 10, buyPrice: 200, sellPrice: 300, buyRate: 1350, sellRate: 1400, feePct: 0.25 }).gain, 1482750);
+eq('ft2 tax', C.foreignStockTax({ gain: 1482750 }).tax, 0);
+// 3: 차익 800만 → 과세표준 550만 → 110만 + 지방 11만 = 121만. 손실 550만 실현하면 0
+var fs1 = C.foreignStockTax({ gain: 8e6 });
+eq('fs1 base', fs1.base, 5500000); eq('fs1 national', fs1.national, 1100000); eq('fs1 local', fs1.local, 110000); eq('fs1 tax', fs1.tax, 1210000);
+eq('fs1 room', fs1.room, 0); eq('fs1 lossToZero', fs1.lossToZero, 5500000); eq('fs1 noFile', fs1.noFilePenalty, 220000); eq('fs1 late30', fs1.latePenalty30, 7260);
+// 4: 이익 1,000만 − 손실 300만 = 700만 → 450만 × 22% = 99만
+eq('fs2 tax', C.foreignStockTax({ gain: 1e7, loss: 3e6 }).tax, 990000);
+// 5: 국세청 안내 사례: 국내주식 손실 400만 + 해외주식 이익 300만 = −100만 → 세금 0, 250만원 공제 여유 그대로
+var fs3 = C.foreignStockTax({ gain: 3e6, domestic: -4e6 });
+eq('fs3 total', fs3.total, -1000000); eq('fs3 tax', fs3.tax, 0); eq('fs3 room', fs3.room, 2500000);
+// 6: 차익 200만 → 공제 안에서 50만 더 실현 가능
+eq('fs4 room', C.foreignStockTax({ gain: 2e6 }).room, 500000);
+// 7: 국내시장복귀계좌(8~12월 50%): 차익 600만 중 RIA 400만 → 기본공제 뒤 350만, RIA 공제 200만 → 150만 × 22% = 33만. RIA 400만뿐이면 공제가 150만에서 막혀 0
+var fs5 = C.foreignStockTax({ gain: 6e6, riaGain: 4e6 });
+eq('fs5 base0', fs5.base0, 3500000); eq('fs5 riaDed', fs5.riaDed, 2000000); eq('fs5 national', fs5.national, 300000); eq('fs5 local', fs5.local, 30000);
+eq('fs5b riaDed', C.foreignStockTax({ gain: 4e6, riaGain: 4e6 }).riaDed, 1500000); eq('fs5b tax', C.foreignStockTax({ gain: 4e6, riaGain: 4e6 }).tax, 0);
+// 8: 분납(시행령 제175조): 차익 6,000만 → 산출세액 1,150만 → 1천만 초과분 150만. 1억 3천만 → 2,550만 → 50%인 1,275만. 3,000만 → 550만은 분납 없음
+var fs6 = C.foreignStockTax({ gain: 6e7 });
+eq('fs6 split', fs6.split, true); eq('fs6 splitAmount', fs6.splitAmount, 1500000);
+eq('fs6b splitAmount', C.foreignStockTax({ gain: 1.3e8 }).splitAmount, 12750000);
+eq('fs6c split', C.foreignStockTax({ gain: 3e7 }).split, false);
+// 9: 10원 미만 버림: 과세표준 1,234,567 → 246,913.4 → 246,910 / 24,691.3 → 24,690
+var fs7 = C.foreignStockTax({ gain: 3734567 });
+eq('fs7 national', fs7.national, 246910); eq('fs7 local', fs7.local, 24690);
+// 10: 중소기업 주식 10%: 800만 → 550만 × 10% = 55만 + 5.5만
+eq('fs8 sme', C.foreignStockTax({ gain: 8e6, sme: true }).tax, 605000);
+// 11: 연말 전략: 이익 1,000만·손실 300만에 평가손실 600만 → 450만만 손절하면 세금 99만 → 0
+var fp1 = C.foreignStockPlan({ gain: 1e7, loss: 3e6, unrealLoss: 6e6 });
+eq('fp1 sellLoss', fp1.sellLoss, 4500000); eq('fp1 save', fp1.saveByLoss, 990000); eq('fp1 after', fp1.afterLoss.tax, 0);
+//     이익 100만에 평가이익 200만 → 150만까지 익절해도 세금 0, 전부 팔면 300만 → 50만 × 22% = 11만
+var fp2 = C.foreignStockPlan({ gain: 1e6, unrealGain: 2e6 });
+eq('fp2 sellGain', fp2.sellGain, 1500000); eq('fp2 afterAll', fp2.afterAll.tax, 110000); eq('fp2 per100', fp2.per100, 220000);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }
