@@ -62,7 +62,7 @@ UI.bind('f', 'out', function () {
     if (r.room > 0) notes.push('공제 한도까지 ' + Calc.won(r.room) + ' 남았습니다. 남은 공제는 10년 합산 기준으로 따집니다.');
     notes.push('낼 세금이 없어도 신고해 두면 나중에 자금 출처를 설명할 때 근거가 됩니다.');
   } else {
-    notes.push('기한 안에 신고하지 않으면 3% 공제가 없어지고 무신고 가산세 ' + Calc.won(r.noFilePenalty) + '(20%)가 붙어 ' + Calc.won(r.noFileTotal) + ' 이상이 됩니다. 납부지연 가산세는 하루 0.022%씩 더 붙습니다.');
+    notes.push('기한 안에 신고하지 않으면 3% 공제가 없어지고 무신고 가산세(20%) ' + Calc.won(r.noFilePenalty) + '이 붙어 ' + Calc.won(r.noFileTotal) + ' 이상이 됩니다. 납부지연 가산세는 하루 0.022%씩 더 붙습니다.');
   }
   if (r.splitAmount) notes.push(Calc.won(r.splitAmount) + '까지는 납부기한 뒤 2개월 안에 나눠 낼 수 있습니다.');
   if (r.installment) notes.push('납부할 세액이 2천만원을 넘어 담보를 제공하고 연부연납을 신청할 수도 있습니다.');
