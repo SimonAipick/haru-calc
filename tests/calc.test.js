@@ -500,6 +500,49 @@ eq('fp1 sellLoss', fp1.sellLoss, 4500000); eq('fp1 save', fp1.saveByLoss, 990000
 var fp2 = C.foreignStockPlan({ gain: 1e6, unrealGain: 2e6 });
 eq('fp2 sellGain', fp2.sellGain, 1500000); eq('fp2 afterAll', fp2.afterAll.tax, 110000); eq('fp2 per100', fp2.per100, 220000);
 
+// ---------- 증여세 (손계산) ----------
+// 성년 자녀 1억: 1억 − 5천 = 5천 × 10% = 500만, 신고공제 15만, 납부 485만
+var g1 = C.giftTax({ amount: 1e8, relation: 'parent' });
+eq('g1 base', g1.base, 5e7); eq('g1 calc', g1.calc, 5e6); eq('g1 report', g1.reportCredit, 150000); eq('g1 pay', g1.payable, 4850000);
+// 미성년 3천: 공제 2천 → 1천 × 10% = 100만 − 3만 = 97만
+eq('g2 pay', C.giftTax({ amount: 3e7, relation: 'parent', minor: true }).payable, 970000);
+// 배우자 7억: 7억 − 6억 = 1억 → 1천만 − 30만 = 970만
+eq('g3 pay', C.giftTax({ amount: 7e8, relation: 'spouse' }).payable, 9700000);
+// 혼인 공제: 1.5억 = 5천 + 1억 → 세금 0
+var g4 = C.giftTax({ amount: 1.5e8, relation: 'parent', marriage: true });
+eq('g4 marriage', g4.marriageDed, 1e8); eq('g4 pay', g4.payable, 0); eq('g4 room', g4.room, 0);
+// 5억: 4.5억 × 20% − 1천만 = 8천만, 3% 240만, 납부 7,760만, 분납 절반 3,880만
+var g5 = C.giftTax({ amount: 5e8, relation: 'parent' });
+eq('g5 calc', g5.calc, 8e7); eq('g5 pay', g5.payable, 77600000); eq('g5 split', g5.splitAmount, 38800000); eq('g5 inst', g5.installment, true);
+// 성년 손주 1억: 500만 + 할증 150만 = 650만, 3% 19.5만, 납부 630.5만
+var g6 = C.giftTax({ amount: 1e8, relation: 'grandparent' });
+eq('g6 sur', g6.surcharge, 1500000); eq('g6 pay', g6.payable, 6305000);
+// 자녀 사망으로 손주가 받으면 할증 없음
+eq('g6b sur', C.giftTax({ amount: 1e8, relation: 'grandparentDeceased' }).surcharge, 0);
+// 미성년 손주 30억: 29.8억 × 40% − 1.6억 = 10.32억, 할증 40% 4.128억, 합계 14.448억, 3% 43,344,000, 납부 1,401,456,000
+var g7 = C.giftTax({ amount: 3e9, relation: 'grandparent', minor: true });
+eq('g7 calc', g7.calc, 1032000000); eq('g7 sur', g7.surcharge, 412800000); eq('g7 pay', g7.payable, 1401456000);
+// 10년 합산: 전에 5천(세금 0) + 이번 5천 → 1억 − 5천 = 5천 → 500만 − 15만 = 485만
+eq('g8 pay', C.giftTax({ amount: 5e7, relation: 'parent', prior: 5e7 }).payable, 4850000);
+// 전에 1억(산출 500만) + 이번 1억: 2억 − 5천 = 1.5억 → 2천만, 납부세액공제 한도 2천만 × 5천/1.5억 = 666만 → 500만, (2천만 − 500만) × 97% = 1,455만, 분납 455만
+var g9 = C.giftTax({ amount: 1e8, relation: 'parent', prior: 1e8, priorTax: 5e6 });
+eq('g9 calc', g9.calc, 2e7); eq('g9 credit', g9.priorCredit, 5e6); eq('g9 pay', g9.payable, 14550000); eq('g9 split', g9.splitAmount, 4550000);
+// 과세최저한: 기타친족 1,040만 → 과세표준 40만 → 0 / 1,050만 → 50만 × 10% = 5만 − 1,500 = 48,500
+eq('g10 pay', C.giftTax({ amount: 10400000, relation: 'relative' }).payable, 0);
+eq('g10b pay', C.giftTax({ amount: 10500000, relation: 'relative' }).payable, 48500);
+// 부담부증여: 3억 − 채무 1억 = 2억 − 5천 = 1.5억 → 2천만
+eq('g11 calc', C.giftTax({ amount: 3e8, debt: 1e8, relation: 'parent' }).calc, 2e7);
+// 타인 1천만: 공제 없음 → 100만
+eq('g12 calc', C.giftTax({ amount: 1e7, relation: 'other' }).calc, 1e6);
+// 1천만원 미만 과거 증여는 합산 안 하지만 공제는 소진: 900만 + 이번 5천 → 공제 4,100만 → 900만 × 10% = 90만
+var g13 = C.giftTax({ amount: 5e7, relation: 'parent', prior: 9e6 });
+eq('g13 added', g13.added, 0); eq('g13 ded', g13.deduction, 41000000); eq('g13 calc', g13.calc, 900000);
+// 공제 안에서 더 받을 수 있는 금액: 3천만 → 2천만 남음
+eq('g14 room', C.giftTax({ amount: 3e7, relation: 'parent' }).room, 2e7);
+// 신고기한
+var gd = C.giftDeadline(new Date(2026, 10, 30)); eq('gd m', gd.getMonth(), 1); eq('gd d', gd.getDate(), 28); eq('gd y', gd.getFullYear(), 2027);
+var gd2 = C.giftDeadline(new Date(2026, 11, 15)); eq('gd2 m', gd2.getMonth(), 2); eq('gd2 d', gd2.getDate(), 31);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

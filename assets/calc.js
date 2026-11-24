@@ -1080,6 +1080,58 @@
     return { now, sellGain, sellLoss, saveByLoss: now.tax - afterLoss.tax, afterLoss, afterAll, per100: trunc10(100 * MAN * (o.sme ? FSTOCK.smeRate : FSTOCK.rate) * (1 + FSTOCK.localRatio)) };
   }
 
+  // ---------- 증여세 ----------
+  // 상속세 및 증여세법(법률 제21065호 판, 시행 2026. 1. 2.): 제47조(과세가액, 채무 인수액 차감, 10년 안 동일인 증여 합계 1천만원 이상 가산, 직계존속은 그 배우자 포함),
+  //   제53조(증여재산공제 10년 합산: 배우자 6억, 직계존속 5천만·미성년 2천만, 직계비속 5천만, 4촌 이내 혈족·3촌 이내 인척 1천만), 제53조의2(혼인 전후 2년·출산 2년, 직계존속, 합계 1억),
+  //   제55조②(과세표준 50만원 미만 부과 안 함), 제56조·제26조(세율, 국세청 세액계산 흐름도로 표 확인), 제57조(세대생략 30%, 미성년 + 20억 초과 40%, 최근친 사망 예외),
+  //   제58조(납부세액공제, 가산 재산 과세표준 비율 한도), 제68조(달 말일부터 3개월), 제69조②(신고세액공제 3%), 제70조②·시행령 제66조②(1천만원 초과 분납), 제71조(2천만원 초과 연부연납).
+  //   시행령 제46조①1호(먼저 받은 증여부터 공제), 제46조의3(할증 = 산출세액 × 비율 × 30/40% − 종전 할증, 증여재산가액에 10년 합산분 포함). 국세기본법 제47조의2(무신고 20%).
+  const GIFT = { limits: { spouse: 60000 * MAN, parent: 5000 * MAN, grandparent: 5000 * MAN, grandparentDeceased: 5000 * MAN, child: 5000 * MAN, relative: 1000 * MAN, other: 0 },
+    minorLimit: 2000 * MAN, marriageCap: 10000 * MAN, addMin: 1000 * MAN, minBase: 50 * MAN, reportRate: 0.03, surcharge: 0.3, surchargeMinor: 0.4, surchargeMinorOver: 200000 * MAN,
+    splitMin: 1000 * MAN, installmentMin: 2000 * MAN, noFilePenalty: 0.2,
+    brackets: [[10000 * MAN, 0.1, 0], [50000 * MAN, 0.2, 1000 * MAN], [100000 * MAN, 0.3, 6000 * MAN], [300000 * MAN, 0.4, 16000 * MAN], [Infinity, 0.5, 46000 * MAN]] };
+  function giftRate(base) {
+    const b = GIFT.brackets.find((x) => base <= x[0]);
+    return { rate: b[1], quick: b[2], tax: Math.max(0, Math.floor(base * b[1] - b[2])) };
+  }
+  // o: { amount, debt, relation, minor, marriage(혼인·출산 공제 해당), marriageUsed(합산되지 않는 다른 증여에서 쓴 혼인·출산 공제),
+  //      prior(10년 안 같은 분 증여), priorTax(그때 산출세액), priorSurcharge(그때 할증세액), otherUsed(합산되지 않는 같은 그룹 증여에서 쓴 공제) }
+  function giftTax(o) {
+    const amount = Math.max(0, o.amount || 0), debt = Math.min(amount, Math.max(0, o.debt || 0)), net = amount - debt;
+    const relation = o.relation || 'parent';
+    const isAscendant = relation === 'parent' || relation === 'grandparent' || relation === 'grandparentDeceased';
+    const limit = isAscendant && o.minor ? GIFT.minorLimit : (GIFT.limits[relation] || 0);
+    const prior = Math.max(0, o.prior || 0), added = prior >= GIFT.addMin ? prior : 0;
+    const taxable = net + added;
+    const usedOutside = Math.max(0, o.otherUsed || 0) + (added ? 0 : Math.min(prior, limit));
+    const roomDed = Math.max(0, limit - usedOutside);
+    const deduction = Math.min(taxable, roomDed);
+    const roomMarriage = isAscendant && o.marriage ? Math.max(0, GIFT.marriageCap - Math.max(0, o.marriageUsed || 0)) : 0;
+    const marriageDed = Math.min(taxable - deduction, roomMarriage);
+    const rawBase = taxable - deduction - marriageDed;
+    const belowMin = rawBase > 0 && rawBase < GIFT.minBase;
+    const base = belowMin ? 0 : rawBase;
+    const r = giftRate(base);
+    const calc = r.tax;
+    const skip = relation === 'grandparent';
+    const surRate = skip ? (o.minor && amount + added > GIFT.surchargeMinorOver ? GIFT.surchargeMinor : GIFT.surcharge) : 0;
+    const surcharge = skip ? Math.max(0, Math.floor(calc * surRate) - Math.max(0, o.priorSurcharge || 0)) : 0;
+    const priorBase = Math.max(0, added - deduction);
+    const creditCap = base > 0 ? Math.floor(calc * Math.min(priorBase, base) / base) : 0;
+    const priorCredit = Math.min(Math.max(0, o.priorTax || 0), creditCap);
+    const beforeReport = Math.max(0, calc + surcharge - priorCredit);
+    const reportCredit = Math.floor(beforeReport * GIFT.reportRate);
+    const payable = trunc10(beforeReport - reportCredit);
+    const splitAmount = payable > GIFT.splitMin ? (payable <= 2 * GIFT.splitMin ? payable - GIFT.splitMin : Math.floor(payable / 2)) : 0;
+    return { amount, debt, net, added, taxable, limit, deduction, marriageDed, base, belowMin, rate: r.rate, quick: r.quick, calc, surRate, surcharge,
+      priorCredit, beforeReport, reportCredit, payable, splitAmount, installment: payable > GIFT.installmentMin,
+      noFilePenalty: trunc10(beforeReport * GIFT.noFilePenalty), noFileTotal: trunc10(beforeReport) + trunc10(beforeReport * GIFT.noFilePenalty),
+      room: Math.max(0, roomDed + roomMarriage - taxable),
+      effective: amount > 0 ? payable / amount : 0 };
+  }
+  // 신고기한: 증여받은 날이 속하는 달의 말일부터 3개월
+  function giftDeadline(d) { return new Date(d.getFullYear(), d.getMonth() + 4, 0); }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -1099,6 +1151,7 @@
     RENT, rentRate, rentYearAmount, rentCredit, rentCouple,
     HOUSING, housingDeduction, housingSubRoom,
     FSTOCK, foreignTrade, foreignStockTax, foreignStockPlan,
+    GIFT, giftRate, giftTax, giftDeadline,
     comma, won, korean,
   };
 
