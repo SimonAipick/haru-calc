@@ -543,6 +543,41 @@ eq('g14 room', C.giftTax({ amount: 3e7, relation: 'parent' }).room, 2e7);
 var gd = C.giftDeadline(new Date(2026, 10, 30)); eq('gd m', gd.getMonth(), 1); eq('gd d', gd.getDate(), 28); eq('gd y', gd.getFullYear(), 2027);
 var gd2 = C.giftDeadline(new Date(2026, 11, 15)); eq('gd2 m', gd2.getMonth(), 2); eq('gd2 d', gd2.getDate(), 31);
 
+// 부가가치세 — 간이: 음식점 6천만 × 15% × 10% = 90만, 매입 2천만 × 0.5% = 10만, 카드 4천만 × 1.3% = 52만, 전자신고 5천 → 275,000
+var v1 = C.simpleVat({ sales: 6e7, sector: 'retail', purchases: 2e7, card: 4e7, consumer: true, eFile: true });
+eq('v1 base', v1.base, 900000); eq('v1 pc', v1.purchaseCredit, 100000); eq('v1 card', v1.cardFull, 520000); eq('v1 tax', v1.tax, 275000);
+eq('v1 exempt', v1.exempt, false); eq('v1 over', v1.overExempt, 12000000);
+// 같은 숫자를 일반과세로: 60,000,000 × 10/110 = 5,454,545 − 1,818,181 = 3,636,364 − 카드 520,000 = 3,116,364
+eq('v1 general', v1.generalTax, 3116364);
+// 4,500만 → 납부의무 면제 (계산상 세액 675,000 − 카드 585,000 = 90,000 − 5천 = 85,000이지만 0)
+var v2 = C.simpleVat({ sales: 4.5e7, sector: 'retail', card: 4.5e7, consumer: true, eFile: true, prepaid: 300000 });
+eq('v2 exempt', v2.exempt, true); eq('v2 tax', v2.tax, 0); eq('v2 would', v2.exemptTax, 85000); eq('v2 due', v2.due, -300000);
+// 공제가 납부세액을 넘으면 납부세액까지만: 소매 5천만 × 15% × 10% = 75만, 매입 15만 + 카드 65만 = 80만 → 75만까지, 전자신고 공제 0
+var v3 = C.simpleVat({ sales: 5e7, sector: 'retail', purchases: 3e7, card: 5e7, consumer: true, eFile: true });
+eq('v3 base', v3.base, 750000); eq('v3 credits', v3.credits, 750000); eq('v3 lost', v3.lost, 50000); eq('v3 efile', v3.eFile, 0); eq('v3 tax', v3.tax, 0);
+// 소비자 업종이 아니고 직전 연도 4,800만 이상인 간이(제조 20%)는 카드 공제 없음; 직전 4,800만 미만이면 있음
+var v4 = C.simpleVat({ sales: 8e7, sector: 'manufacture', card: 1e7, prevSales: 6e7 });
+eq('v4 base', v4.base, 1600000); eq('v4 card', v4.cardFull, 0); eq('v4 tax', v4.tax, 1600000);
+eq('v4b card', C.simpleVat({ sales: 8e7, sector: 'manufacture', card: 1e7, prevSales: 4e7 }).cardFull, 130000);
+// 1억 400만 이상이면 다음 해 7월부터 일반과세
+eq('v5 general', C.simpleVat({ sales: 1.1e8, sector: 'retail' }).becomesGeneral, true);
+eq('v5b general', C.simpleVat({ sales: 103999999, sector: 'retail' }).becomesGeneral, false);
+// 일반: 매출 1억 → 1천만, 매입 6천만 → 600만, 카드 5,500만 × 1.3% = 715,000, 전자신고 5천, 예정고지 150만 → 1,780,000
+var g1v = C.generalVat({ supply: 1e8, purchases: 6e7, card: 5.5e7, cardOk: true, eFile: true, prepaid: 1500000 });
+eq('gv1 net', g1v.net, 4000000); eq('gv1 card', g1v.cardCredit, 715000); eq('gv1 result', g1v.result, 1780000);
+// 일반 환급: 매출세액 100만 − 매입세액 300만 = −200만, 카드 공제는 0, 전자신고 5천 더해 2,005,000 환급
+var g2v = C.generalVat({ supply: 1e7, purchases: 3e7, card: 1e7, cardOk: true, eFile: true });
+eq('gv2 card', g2v.cardCredit, 0); eq('gv2 refund', g2v.refund, 2005000);
+// 카드 공제 연 1천만원 한도: 9억 × 1.3% = 1,170만, 1기에 300만 받았으면 700만까지
+eq('gv3 card', C.generalVat({ supply: 9e8, card: 9e8, cardOk: true }).cardCredit, 10000000);
+eq('gv3b card', C.generalVat({ supply: 9e8, card: 9e8, cardOk: true, cardUsed: 3e6 }).cardCredit, 7000000);
+// 2027년부터 1%·500만원
+eq('gv4 card', C.generalVat({ supply: 1e8, card: 1e8, cardOk: true, year: 2027 }).cardCredit, 1000000);
+eq('gv4b cap', C.vatCardRule(2027).cap, 5000000);
+// 신고기한: 2027-01-25(월), 2032-01-25(일) → 26일
+var vd = C.vatDeadline(2026); eq('vd y', vd.getFullYear(), 2027); eq('vd d', vd.getDate(), 25); eq('vd w', vd.getDay(), 1);
+eq('vd2 d', C.vatDeadline(2031).getDate(), 26);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

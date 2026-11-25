@@ -1,0 +1,191 @@
+<!--
+{"slug": "vat", "title": "부가가치세 계산기 (간이과세자·일반과세자)", "category": "금융", "order": 15,
+ "short": "1월 확정신고 납부세액",
+ "description": "개인사업자 부가가치세를 계산합니다. 간이과세자는 업종별 부가가치율(15~40%)과 매입 0.5% 공제, 4,800만원 미만 납부 면제를, 일반과세자는 매출세액 − 매입세액과 환급을 계산하고, 카드·현금영수증 매출 1.3% 공제(연 1천만원), 전자신고 공제 5천원, 예정고지 세액까지 반영합니다.",
+ "lead": "2026년 2기(간이과세자는 2026년 1년분) 확정신고는 2027년 1월 25일(월)까지입니다. 홈택스에 들어가기 전에 낼 세금을 미리 맞춰 보세요."}
+-->
+<!-- 근거 (2026-11-25 law.go.kr 원문 확인)
+     부가가치세법 [법률 제21065호, 시행 2026. 1. 2.] https://www.law.go.kr/법령/부가가치세법
+       제30조 10%, 제37조 납부세액 = 매출세액 − 매입세액(넘으면 환급세액), 제46조① 신용카드매출전표·현금영수증 등 발급금액 1%(2026-12-31까지 1.3%),
+       연 500만원(2026-12-31까지 1천만원) 한도. 대상: 시행령 제73조①② 사업을 하는 사업자(법인·직전 연도 공급가액 10억 초과 개인 제외)와
+       제36조①2호 간이과세자(직전 연도 공급대가 4,800만원 미만, 신규 최초 과세기간). 제46조② 납부할 세액을 넘는 공제는 없는 것으로 봄.
+       제48조③ 개인 일반과세자 예정고지 = 직전 과세기간 납부세액 50%(50만원 미만 미징수), 제49조 확정신고 과세기간 끝난 뒤 25일.
+       제61조① 간이과세 적용 범위, 제62조① 기준 이상이 된 해의 다음 해 7월 1일부터 그다음 해 6월 30일까지 적용 여부 변경.
+       제63조② 간이 납부세액 = 과세표준(공급대가) × 업종별 부가가치율 × 10%, ③1호 세금계산서등 받은 매입 공급대가 × 0.5%, ⑥ 공제 합계는 납부세액까지.
+       제39조① 공제하지 않는 매입세액(사업 무관, 비영업용 승용차, 기업업무추진비 등), 제59조① 확정신고 환급 기한 후 30일 이내.
+       제66조 간이 예정부과(직전 과세기간 납부세액 50%, 7월 25일), 제67조 간이 확정신고 다음 해 1월 25일, 제69조①④ 공급대가 4,800만원 미만 납부의무 면제·자진 납부액 환급.
+     부가가치세법 시행령 [대통령령 제36133호, 시행 2026. 4. 1.] https://www.law.go.kr/법령/부가가치세법시행령
+       제73조① 영수증 발급 대상 사업(소매업, 음식점업(다과점 포함), 숙박업, 미용·욕탕, 여객운송, 입장권 사업 등), 제88조②③(제73조①② 사업, 사업장 기준 10억원),
+       제109조① 간이과세 기준 1억 400만원, ② 간이과세 배제 업종(광업, 제조업 일부, 도매업, 전문직 사업서비스 등),
+       제111조② 업종별 부가가치율 표(소매업·재생용 재료수집 및 판매업·음식점업 15%, 제조업·농업·임업·어업·소화물 전문 운송업 20%, 숙박업 25%,
+       건설업·운수 및 창고업·정보통신업 30%, 금융 및 보험 관련 서비스업·전문·과학 및 기술서비스업·사업시설관리·사업지원 및 임대서비스업·
+       부동산 관련 서비스업·부동산임대업 40%, 그 밖의 서비스업 30%)
+     조세특례제한법 제104조의8② 직접 전자신고 세액공제(간이과세자는 남은 납부세액 한도, 매출·매입 없는 일반과세자 제외)
+       https://www.law.go.kr/법령/조세특례제한법/제104조의8
+     조세특례제한법 시행령 제104조의5③④ 부가세 확정신고 5천원 (2026. 2. 27. 개정, 부칙 <대통령령 제36127호> 제25조 시행 이후 전자신고분부터)
+       https://www.law.go.kr/법령/조세특례제한법시행령/제104조의5 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>과세 유형 <small>사업자등록증에 적힌 유형</small></legend>
+    <div class="seg">
+      <label><input type="radio" name="kind" value="simple" checked> 간이과세자</label>
+      <label><input type="radio" name="kind" value="general"> 일반과세자</label>
+    </div>
+  </fieldset>
+
+  <div id="box-simple">
+    <label>업종
+      <select id="sector">
+        <option value="retail">소매업, 음식점업, 재생용 재료수집·판매업 (15%)</option>
+        <option value="manufacture">제조업, 농업·임업·어업, 소화물 전문 운송업 (20%)</option>
+        <option value="lodging">숙박업 (25%)</option>
+        <option value="construction">건설업, 운수·창고업, 정보통신업 (30%)</option>
+        <option value="service">그 밖의 서비스업 — 미용, 수리, 교육 서비스 등 (30%)</option>
+        <option value="finance">부동산임대업, 전문·과학·기술서비스업, 사업지원·임대서비스업, 금융·보험 관련 (40%)</option>
+      </select>
+    </label>
+    <div class="grid2">
+      <label>올해 1년 매출 (공급대가) <small>부가세가 포함된 금액. 카드·현금·계좌이체·배달앱 매출을 모두 더해서</small><input class="money" id="sSales" inputmode="numeric" placeholder="예: 60,000,000"></label>
+      <label>세금계산서·카드로 받은 매입 <small>부가세 포함 금액. 재료비·임차료 등 세금계산서, 사업용 카드·현금영수증(지출증빙)</small><input class="money" id="sPurchases" inputmode="numeric" placeholder="예: 20,000,000"></label>
+      <label>그중 카드·현금영수증 매출 <small>손님이 카드·간편결제·현금영수증으로 낸 금액</small><input class="money" id="sCard" inputmode="numeric" placeholder="예: 40,000,000"></label>
+      <label>7월에 낸 예정부과 세액 <small>7월 고지서로 이미 냈다면</small><input class="money" id="sPrepaid" inputmode="numeric" placeholder="없으면 비워 둠"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="sConsumer" checked> 손님이 주로 일반 소비자다 (소매·음식점·숙박·미용·여객운송 등, 카드 매출 공제 대상)</label>
+    <label class="check"><input type="checkbox" id="sSmallPrev"> 작년 매출이 4,800만원 미만이었거나 올해 개업했다 (업종과 상관없이 카드 매출 공제 대상)</label>
+  </div>
+
+  <div id="box-general" hidden>
+    <div class="grid2">
+      <label>7~12월 매출 공급가액 <small>부가세를 뺀 금액. 세금계산서 + 카드 + 현금 매출 합계 ÷ 1.1</small><input class="money" id="gSupply" inputmode="numeric" placeholder="예: 100,000,000"></label>
+      <label>7~12월 공제받을 매입 공급가액 <small>부가세를 뺀 금액. 세금계산서·사업용 카드 매입 중 공제되는 것만</small><input class="money" id="gPurchases" inputmode="numeric" placeholder="예: 60,000,000"></label>
+      <label>7~12월 카드·현금영수증 매출 <small>부가세 포함 금액</small><input class="money" id="gCard" inputmode="numeric" placeholder="예: 55,000,000"></label>
+      <label>10월 예정고지(예정신고)로 낸 세액 <small>이미 냈다면</small><input class="money" id="gPrepaid" inputmode="numeric" placeholder="없으면 비워 둠"></label>
+      <label>1기(1~6월) 신고 때 받은 카드 매출 공제 <small>연 한도 계산용, 선택</small><input class="money" id="gCardUsed" inputmode="numeric" placeholder="모르면 비워 둠"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="gCardOk" checked> 소매·음식점·숙박·미용 등 소비자 상대 업종이고, 작년 공급가액이 10억원 이하인 개인사업자다 (카드 매출 공제 대상)</label>
+  </div>
+
+  <label class="check"><input type="checkbox" id="eFile" checked> 홈택스·손택스로 직접 신고한다 (전자신고 세액공제 5천원)</label>
+  <button type="submit">부가세 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  function sync() {
+    const g = UI.val('kind') === 'general';
+    UI.$('box-simple').hidden = g;
+    UI.$('box-general').hidden = !g;
+  }
+  document.querySelectorAll('input[name="kind"]').forEach(function (el) { el.addEventListener('change', sync); });
+  sync();
+  const dl = function (d) { return d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일(' + '일월화수목금토'[d.getDay()] + ')'; };
+
+  UI.bind('f', 'out', function () {
+    const eFile = UI.$('eFile').checked;
+    if (UI.val('kind') === 'simple') {
+      const sales = UI.num('sSales');
+      if (!sales) return null;
+      const r = Calc.simpleVat({ sales: sales, sector: UI.val('sector'), purchases: UI.num('sPurchases'), card: UI.num('sCard'),
+        consumer: UI.$('sConsumer').checked, smallPrev: UI.$('sSmallPrev').checked, eFile: eFile, prepaid: UI.num('sPrepaid') });
+      const rows = [
+        ['납부세액 ' + Calc.won(r.sales) + ' × ' + Math.round(r.rate * 100) + '% × 10%', Calc.won(r.base)],
+        ['매입 세금계산서·카드 공제 (0.5%)', '− ' + Calc.won(r.purchaseCredit)],
+        ['카드·현금영수증 매출 공제 (1.3%)', r.cardOk ? '− ' + Calc.won(r.cardFull) : '대상 아님'],
+      ];
+      if (r.lost) rows.push(['납부세액을 넘어 버려지는 공제', Calc.won(r.lost)]);
+      if (eFile) rows.push(['전자신고 세액공제', '− ' + Calc.won(r.eFile)]);
+      rows.push(['올해 부가세', r.exempt ? '0원 (납부 면제)' : Calc.won(r.tax)]);
+      if (r.prepaid) rows.push(['7월 예정부과로 낸 세액', '− ' + Calc.won(r.prepaid)]);
+      rows.push(['매출 대비 세금', (r.effective * 100).toFixed(2) + '%'],
+        ['같은 숫자로 일반과세자였다면 (1년, 전자신고 공제 제외)', Calc.won(Math.max(0, r.generalTax)) + (r.generalTax < 0 ? ' (환급 ' + Calc.won(-r.generalTax) + ')' : '')]);
+      const notes = [];
+      if (r.exempt) notes.push('1년 매출(공급대가)이 <strong>4,800만원 미만</strong>이라 납부의무가 면제됩니다. 면제가 아니었다면 ' + Calc.won(r.exemptTax) + '을 낼 금액입니다. 면제여도 1월 25일까지 신고는 해야 합니다.' + (r.prepaid ? ' 7월에 낸 예정부과 세액은 돌려받을 수 있습니다(제69조④).' : ''));
+      else if (r.overExempt <= 5000000) notes.push('매출이 4,800만원보다 ' + Calc.won(r.overExempt) + ' 많아 면제가 되지 않았습니다. 매출을 줄여 신고하면 가산세 대상이니, 빠진 매출이 없는지만 확인하세요.');
+      if (r.prepaid && r.due < 0 && !r.exempt) notes.push('7월에 낸 예정부과 세액이 올해 세금보다 ' + Calc.won(-r.due) + ' 많습니다. 처리 방법은 홈택스 신고 화면의 차가감 납부세액에서 확인하세요.');
+      if (r.becomesGeneral) notes.push('올해 매출이 <strong>1억 400만원 이상</strong>이라 ' + (r.year + 1) + '년 7월 1일부터 일반과세자로 바뀝니다. 그때부터는 6개월마다 신고하고 매입세액을 10% 그대로 공제받습니다.');
+      if (r.lost) notes.push('간이과세자는 공제가 납부세액보다 많아도 남는 공제를 돌려받거나 이월할 수 없습니다(제63조⑥).');
+      if (!r.cardOk && UI.num('sCard')) notes.push('간이과세자 카드 매출 공제는 소비자 상대 업종이거나, 작년 매출 4,800만원 미만(또는 올해 개업)일 때만 받습니다.');
+      notes.push('신고·납부 기한: <strong>' + dl(r.deadline) + '</strong>까지. 업종이 둘 이상이면 업종별로 따로 계산해 더합니다. 원 단위 버림 차이가 있을 수 있습니다.');
+      return UI.result([r.prepaid ? '1월에 낼 세금 (예정부과분 뺀 금액)' : '1월에 낼 부가세', Calc.won(Math.max(0, r.due))], rows, notes);
+    }
+    const supply = UI.num('gSupply'), purchases = UI.num('gPurchases');
+    if (!supply && !purchases) return null;
+    const r = Calc.generalVat({ supply: supply, purchases: purchases, card: UI.num('gCard'), cardOk: UI.$('gCardOk').checked,
+      cardUsed: UI.num('gCardUsed'), eFile: eFile, prepaid: UI.num('gPrepaid') });
+    const rows = [
+      ['매출세액 (공급가액 × 10%)', Calc.won(r.outTax)],
+      ['매입세액 (공급가액 × 10%)', '− ' + Calc.won(r.inTax)],
+      [r.net >= 0 ? '납부세액' : '환급세액', Calc.won(Math.abs(r.net))],
+      ['카드·현금영수증 매출 공제 (1.3%)', UI.$('gCardOk').checked ? '− ' + Calc.won(r.cardCredit) : '대상 아님'],
+    ];
+    if (eFile) rows.push(['전자신고 세액공제', (r.after > 0 ? '− ' : '환급에 + ') + Calc.won(r.eFile)]);
+    if (r.prepaid) rows.push(['10월 예정고지로 낸 세액', '− ' + Calc.won(r.prepaid)]);
+    const notes = [];
+    if (r.cardLost) notes.push('카드 매출 공제 ' + Calc.won(r.cardFull) + ' 중 ' + Calc.won(r.cardLost) + '은 납부할 세액이 없어서 받지 못합니다. 카드 공제로는 환급이 생기지 않습니다(제46조②).');
+    if (r.cardFull && r.cardFull >= r.cardRoom && r.cardRoom < Calc.vatCardRule(r.year).cap) notes.push('카드 매출 공제는 1년에 1천만원(1기·2기 합계)까지입니다. 1기에 받은 공제를 빼고 ' + Calc.won(r.cardRoom) + '까지 남았습니다.');
+    if (r.refund) notes.push('매입세액이 더 많아 <strong>' + Calc.won(r.refund) + '</strong>을 돌려받습니다. 확정신고 환급은 신고기한이 지난 뒤 30일 안에 들어옵니다(제59조①).');
+    notes.push('신고·납부 기한: <strong>' + dl(r.deadline) + '</strong>까지. 기업업무추진비(접대비), 사업과 관련 없는 지출, 비영업용 승용차 구입·유지비 등 공제가 안 되는 매입세액은 빼고 넣으세요. 원 단위 버림 차이가 있을 수 있습니다.');
+    return UI.result(r.refund ? ['돌려받을 부가세 (환급)', Calc.won(r.refund)] : ['1월에 낼 부가세', Calc.won(r.payable)], rows, notes);
+  });
+})();
+</script>
+<!-- guide -->
+<h2>간이과세자와 일반과세자, 무엇이 다른가요?</h2>
+<p>개인사업자는 직전 연도 매출(부가세 포함 공급대가)이 <strong>1억 400만원</strong>에 못 미치면 간이과세자, 넘으면 일반과세자가 됩니다. 다만 도매업, 제조업 일부, 변호사·세무사 같은 전문직, 일정 규모 이상 부동산임대업 등은 매출이 적어도 간이과세자가 될 수 없습니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th></th><th>간이과세자</th><th>일반과세자</th></tr></thead>
+  <tbody>
+    <tr><td>과세기간</td><td>1년 (1월~12월)</td><td>6개월 (1기 1~6월, 2기 7~12월)</td></tr>
+    <tr><td>확정신고</td><td>다음 해 1월 25일까지 1번</td><td>7월 25일, 다음 해 1월 25일 2번</td></tr>
+    <tr><td>낼 세금</td><td>매출 × 업종별 부가가치율 × 10%</td><td>매출세액 − 매입세액</td></tr>
+    <tr><td>매입 공제</td><td>매입 공급대가 × 0.5%</td><td>매입세액 10% 전액</td></tr>
+    <tr><td>환급</td><td>없음</td><td>매입세액이 더 많으면 환급</td></tr>
+    <tr><td>납부 면제</td><td>1년 매출 4,800만원 미만이면 면제</td><td>없음</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>간이과세자 계산 방법</h2>
+<p class="formula">납부세액 = 1년 매출(공급대가) × 업종별 부가가치율 × 10%<br>낼 세금 = 납부세액 − 매입 공급대가 × 0.5% − 카드 매출 × 1.3% − 전자신고 5천원</p>
+<p>업종별 부가가치율은 부가가치세법 시행령 제111조에 정해져 있습니다.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>업종</th><th>부가가치율</th><th>매출 1억원일 때 납부세액</th></tr></thead>
+  <tbody>
+    <tr><td>소매업, 재생용 재료수집 및 판매업, 음식점업</td><td>15%</td><td>150만원</td></tr>
+    <tr><td>제조업, 농업·임업·어업, 소화물 전문 운송업</td><td>20%</td><td>200만원</td></tr>
+    <tr><td>숙박업</td><td>25%</td><td>250만원</td></tr>
+    <tr><td>건설업, 운수 및 창고업, 정보통신업</td><td>30%</td><td>300만원</td></tr>
+    <tr><td>금융·보험 관련 서비스업, 전문·과학·기술서비스업, 사업시설관리·사업지원·임대서비스업, 부동산 관련 서비스업, 부동산임대업</td><td>40%</td><td>400만원</td></tr>
+    <tr><td>그 밖의 서비스업</td><td>30%</td><td>300만원</td></tr>
+  </tbody>
+</table>
+</div>
+<p>공제(매입 0.5%, 카드 매출 1.3%, 전자신고)를 다 합쳐도 납부세액보다 많이 빼 주지는 않고, 남는 공제는 돌려받지도 넘기지도 못합니다.</p>
+
+<h3>예시: 매출 6천만원인 간이과세 분식집</h3>
+<p>매출 6,000만원 × 15% × 10% = 90만원. 재료 매입 2,000만원(세금계산서·사업용 카드) × 0.5% = 10만원, 카드 매출 4,000만원 × 1.3% = 52만원, 직접 전자신고 5천원을 빼면 <strong>27만 5천원</strong>입니다. 같은 숫자로 일반과세자였다면 매출세액 약 545만원 − 매입세액 약 182만원 − 카드 공제 52만원 = 약 312만원이라, 간이과세가 훨씬 유리합니다.</p>
+
+<h2>일반과세자 계산 방법</h2>
+<p class="formula">낼 세금 = 매출세액(매출 공급가액 × 10%) − 매입세액 − 카드 매출 × 1.3% − 전자신고 5천원 − 예정고지 세액</p>
+<p>매입세액이 매출세액보다 많으면 차액을 돌려받습니다(환급). 다만 카드 매출 공제는 낼 세금이 있을 때만 그 금액까지 빼 주므로, 카드 공제 때문에 환급이 생기지는 않습니다. 개인 일반과세자는 4월과 10월에 직전 과세기간 납부세액의 50%를 예정고지로 미리 내고(50만원 미만이면 고지 없음), 확정신고 때 그 금액을 뺍니다.</p>
+
+<h2>카드·현금영수증 매출 공제 (신용카드매출전표 등 발급세액공제)</h2>
+<ul>
+  <li>공제율: 카드·현금영수증·간편결제 매출의 <strong>1.3%</strong>, 1년에 <strong>1천만원</strong>까지 (2026년 12월 31일까지). 2027년부터는 법이 바뀌지 않으면 1%, 500만원으로 줄어듭니다.</li>
+  <li>대상: 소매업·음식점업·숙박업·미용업·여객운송업 등 주로 소비자를 상대하는 업종의 개인사업자(사업장 직전 연도 공급가액 10억원 이하), 그리고 업종과 상관없이 직전 연도 매출 4,800만원 미만이거나 처음 개업한 간이과세자.</li>
+  <li>법인사업자는 받을 수 없습니다.</li>
+</ul>
+
+<h2>자주 묻는 질문</h2>
+<h3>매출이 4,800만원보다 적은 간이과세자도 신고해야 하나요?</h3>
+<p>네. 납부의무만 면제되고 신고는 해야 합니다. 1월 25일까지 홈택스에서 매출을 신고하면 됩니다. 면제 대상인데 7월 예정부과 세액을 냈다면 돌려받습니다. 올해 중간에 개업했다면 12개월로 환산한 매출로 4,800만원 기준을 봅니다.</p>
+<h3>배달앱·오픈마켓 매출은 어디에 넣나요?</h3>
+<p>배달앱이나 오픈마켓이 대신 받아 정산한 매출도 매출입니다. 앱에서 카드·간편결제로 결제된 부분은 카드 매출 공제 대상이 될 수 있으니, 정산 내역의 결제 수단별 금액을 확인해 넣으세요.</p>
+<h3>간이과세자가 일반과세자로 바뀌는 시점은요?</h3>
+<p>1월부터 12월까지 매출이 1억 400만원 이상이 되면, 그다음 해 <strong>7월 1일</strong>부터 일반과세자가 됩니다. 2026년 매출이 기준을 넘었다면 2027년 1~6월은 간이과세자로 신고하고 7월부터 일반과세자로 신고합니다.</p>
+<h3>전자신고 세액공제가 1만원 아닌가요?</h3>
+<p>부가세 전자신고 세액공제는 2026년 2월 27일 조세특례제한법 시행령 개정으로 <strong>5천원</strong>이 되었습니다. 그 뒤에 직접 전자신고하는 분부터 적용되어, 2027년 1월 확정신고에는 5천원이 들어갑니다. 세무대리인이 신고하면 사업자 본인은 받지 못합니다.</p>
+<h3>이 계산기에 들어가지 않은 것</h3>
+<p>음식점의 의제매입세액공제(면세 농·축·수산물 매입), 전자세금계산서 발급세액공제, 대손세액, 과세·면세 겸영 안분, 가산세는 계산하지 않습니다. 업종이 둘 이상인 간이과세자는 업종별로 나누어 각각 계산한 뒤 더하세요. 정확한 금액은 홈택스 신고 화면의 미리 채워진 자료로 확인하세요.</p>

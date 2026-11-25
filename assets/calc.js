@@ -1132,6 +1132,80 @@
   // 신고기한: 증여받은 날이 속하는 달의 말일부터 3개월
   function giftDeadline(d) { return new Date(d.getFullYear(), d.getMonth() + 4, 0); }
 
+  // ---------- 부가가치세 (개인사업자 확정신고) ----------
+  // law.go.kr 2026-11-25 확인: 부가가치세법(법률 제21065호, 시행 2026. 1. 2.) 제30조(10%), 제37조(매출세액 − 매입세액, 넘으면 환급),
+  //   제46조①(신용카드매출전표·현금영수증 발급액 1.3%, 연 1천만원 — 2026-12-31까지, 그 뒤 1%·500만원. 대상: 시행령 제73조①② 업종(소매·음식·숙박·
+  //   미용 등)을 하는 개인사업자(사업장 직전 연도 공급가액 10억원 이하, 시행령 제88조③)와 제36조①2호 간이과세자(직전 연도 공급대가 4,800만원 미만·신규)),
+  //   제46조②(납부할 세액을 넘는 공제는 없는 것), 제48조③(개인 일반과세자 예정고지 = 직전 과세기간 납부세액 50%, 50만원 미만 미징수), 제49조(확정신고 25일),
+  //   제61조·시행령 제109조①(간이 기준 1억 400만원), 제62조①(기준 넘은 해의 다음 해 7월 1일부터 유형 변경),
+  //   제63조②(간이 납부세액 = 공급대가 × 업종별 부가가치율 × 10%), ③1호(세금계산서 등 받은 매입 공급대가 × 0.5%), ⑥(간이는 공제 합계가 납부세액을 못 넘음),
+  //   제66조(간이 예정부과 50%), 제67조(간이 과세기간 1/1~12/31, 다음 해 1월 25일 신고), 제69조①④(간이 공급대가 4,800만원 미만 납부의무 면제, 자진 납부분 환급),
+  //   시행령(대통령령 제36133호, 시행 2026. 4. 1.) 제111조② 부가가치율 표(소매·재생용 재료수집·음식점 15%, 제조·농림어업·소화물 운송 20%, 숙박 25%,
+  //   건설·운수창고·정보통신 30%, 금융보험·전문과학기술·사업시설관리·부동산 관련 서비스·부동산임대 40%, 그 밖 서비스 30%).
+  // 조특법 제104조의8② 직접 전자신고 세액공제(간이는 남은 납부세액 한도), 시행령 제104조의5③④: 확정신고(제49조·제67조)에 5천원
+  //   (2026. 2. 27. 개정 전 1만원, 부칙(대통령령 제36127호) 제25조: 시행 이후 전자신고분부터).
+  // 미반영: 의제매입세액공제(제42조), 전자세금계산서 발급세액공제(제47조), 대손세액, 겸영 안분, 가산세.
+  const VAT = { rate: 0.1, simpleLimit: 104000000, exemptLimit: 48000000, receiptLimit: 48000000, bigLimit: 1000000000,
+    sectors: { retail: 0.15, manufacture: 0.2, lodging: 0.25, construction: 0.3, service: 0.3, finance: 0.4 },
+    simplePurchaseRate: 0.005, eFiling: 5000 };
+  // 신용카드 등 발급세액공제: 2026-12-31까지 1.3%·연 1천만원, 그 뒤 1%·연 500만원 (제46조①3호)
+  function vatCardRule(year) { return (year || 2026) <= 2026 ? { rate: 0.013, cap: 10000000 } : { rate: 0.01, cap: 5000000 }; }
+  // 확정신고 기한: 다음 해 1월 25일, 토·일이면 다음 월요일 (국세기본법 제5조. 공휴일은 1월 25일 근처에 설날이 오는 해만 따로 확인)
+  function vatDeadline(year) {
+    const d = new Date(year + 1, 0, 25);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return d;
+  }
+  // 간이과세자 한 해 확정신고. o: { sales(1년 공급대가, 부가세 포함), sector, purchases(세금계산서·카드 등으로 받은 매입 공급대가),
+  //   card(카드·현금영수증 매출, 부가세 포함), consumer(시행령 제73조① 소비자 대상 업종), prevSales(직전 연도 공급대가, 선택), smallPrev(직전 연도 4,800만원 미만이었거나 올해 개업한 간이),
+  //   eFile(직접 전자신고), prepaid(7월 예정부과로 이미 낸 세액), year }
+  function simpleVat(o) {
+    const z = (v) => Math.max(0, v || 0);
+    const year = o.year || 2026, rule = vatCardRule(year);
+    const sales = z(o.sales), rate = VAT.sectors[o.sector] != null ? VAT.sectors[o.sector] : 0.3;
+    const base = Math.floor(sales * rate * VAT.rate + 1e-6);
+    const purchaseCredit = Math.floor(z(o.purchases) * VAT.simplePurchaseRate + 1e-6);
+    const receiptOnly = !!o.smallPrev || (o.prevSales != null && o.prevSales > 0 && o.prevSales < VAT.receiptLimit);
+    const cardOk = !!o.consumer || receiptOnly;
+    const cardFull = cardOk ? Math.min(Math.floor(z(o.card) * rule.rate + 1e-6), rule.cap) : 0;
+    const credits = Math.min(base, purchaseCredit + cardFull);
+    const lost = purchaseCredit + cardFull - credits;
+    const afterCredits = base - credits;
+    const eFile = o.eFile ? Math.min(VAT.eFiling, afterCredits) : 0;
+    const exempt = sales < VAT.exemptLimit;
+    const tax = exempt ? 0 : afterCredits - eFile;
+    const prepaid = z(o.prepaid);
+    // 같은 숫자를 일반과세자로 계산하면 (1년 합계, 전자신고 공제 제외 — 일반과세자는 1·2기 두 번 신고)
+    const outTax = Math.floor(sales * 10 / 110 + 1e-6), inTax = Math.floor(z(o.purchases) * 10 / 110 + 1e-6);
+    const gNet = outTax - inTax;
+    const gCard = o.consumer ? Math.min(Math.floor(z(o.card) * rule.rate + 1e-6), rule.cap, Math.max(0, gNet)) : 0;
+    return { year, sales, rate, base, purchaseCredit, receiptOnly, cardOk, cardFull, credits, lost, afterCredits, eFile, exempt,
+      exemptTax: exempt ? afterCredits - eFile : 0, tax, prepaid, due: tax - prepaid,
+      becomesGeneral: sales >= VAT.simpleLimit, overExempt: exempt ? 0 : sales - VAT.exemptLimit,
+      generalTax: gNet - gCard, generalOut: outTax, generalIn: inTax, generalCard: gCard,
+      effective: sales ? tax / sales : 0, deadline: vatDeadline(year) };
+  }
+  // 일반과세자(개인) 한 과세기간 확정신고. o: { supply(매출 공급가액, 부가세 별도), purchases(공제받을 매입 공급가액, 부가세 별도),
+  //   card(카드·현금영수증 매출, 부가세 포함), cardOk(소비자 대상 업종·직전 연도 공급가액 10억 이하), cardUsed(올해 앞 과세기간에 받은 카드 공제),
+  //   eFile, prepaid(예정고지·예정신고로 낸 세액), year }
+  function generalVat(o) {
+    const z = (v) => Math.max(0, v || 0);
+    const year = o.year || 2026, rule = vatCardRule(year);
+    const outTax = Math.floor(z(o.supply) * VAT.rate + 1e-6), inTax = Math.floor(z(o.purchases) * VAT.rate + 1e-6);
+    const net = outTax - inTax;
+    const cardRoom = Math.max(0, rule.cap - z(o.cardUsed));
+    const cardFull = o.cardOk ? Math.min(Math.floor(z(o.card) * rule.rate + 1e-6), cardRoom) : 0;
+    const cardCredit = Math.min(cardFull, Math.max(0, net));
+    const after = net - cardCredit;
+    // 전자신고 공제: 납부세액에서 빼거나 환급세액에 더함, 매출·매입이 모두 없으면 없음 (조특법 제104조의8② 단서)
+    const active = outTax > 0 || inTax > 0;
+    const eFile = o.eFile && active ? (after > 0 ? Math.min(VAT.eFiling, after) : VAT.eFiling) : 0;
+    const prepaid = z(o.prepaid);
+    const result = after - eFile - prepaid;
+    return { year, outTax, inTax, net, cardRoom, cardFull, cardCredit, cardLost: cardFull - cardCredit, after, eFile, prepaid, result,
+      refund: result < 0 ? -result : 0, payable: result > 0 ? result : 0, deadline: vatDeadline(year) };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -1152,6 +1226,7 @@
     HOUSING, housingDeduction, housingSubRoom,
     FSTOCK, foreignTrade, foreignStockTax, foreignStockPlan,
     GIFT, giftRate, giftTax, giftDeadline,
+    VAT, vatCardRule, vatDeadline, simpleVat, generalVat,
     comma, won, korean,
   };
 
