@@ -1206,6 +1206,67 @@
       refund: result < 0 ? -result : 0, payable: result > 0 ? result : 0, deadline: vatDeadline(year) };
   }
 
+
+  // ---------- 연장·야간·휴일 근로수당 ----------
+  // 근로기준법 제56조(①연장 50%, ②휴일 8시간 이내 50%·초과 100%, ③야간(22시~06시) 50%), 제50조(1일 8시간·1주 40시간),
+  // 기간제법 제6조③(단시간근로자 소정근로시간 초과 50%). 상시 4명 이하 사업장은 제56조 미적용(시행령 제7조·별표 1, 고용노동부 답변)
+  const zn = (v) => (isFinite(v) ? Number(v) : 0);
+  const OVERTIME = { otRate: 0.5, nightRate: 0.5, hol8Rate: 0.5, holOverRate: 1.0, dayLimit: 8, monthBase: 209, nightStart: 22 * 60, nightEnd: 6 * 60 };
+  // 월 통상임금 → 통상시급 (주 40시간 + 주휴 8시간 기준 월 209시간)
+  function hourlyFromMonthly(m, base) { return m / (base || OVERTIME.monthBase); }
+  // 'HH:MM' → 분
+  function hm(s) {
+    if (typeof s === 'number') return s;
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+    if (!m) return NaN;
+    return Number(m[1]) * 60 + Number(m[2]);
+  }
+  // 출근·퇴근 시각으로 근로시간과 야간 시간(22~06시)을 구한다. 퇴근이 출근보다 이르면 다음 날 퇴근.
+  // breakMin: 휴게시간 전체(분), nightBreakMin: 그중 22~06시에 쉰 시간(분)
+  function shiftHours(start, end, breakMin, nightBreakMin) {
+    const a = hm(start); let b = hm(end);
+    if (!isFinite(a) || !isFinite(b)) return null;
+    if (b <= a) b += 1440;
+    const span = b - a;
+    let night = 0;
+    // 출근일 기준 0~6시, 22~30시(다음 날 6시), 46~54시 구간과 겹치는 분
+    [[0, 360], [1320, 1800], [2760, 3240]].forEach(([x, y]) => { night += Math.max(0, Math.min(b, y) - Math.max(a, x)); });
+    const br = Math.min(Math.max(0, breakMin || 0), span);
+    const nbr = Math.min(Math.max(0, nightBreakMin || 0), br, night);
+    return { span: span / 60, work: (span - br) / 60, night: (night - nbr) / 60 };
+  }
+  // 하루 근무 수당. work·night는 시간. holiday: 휴일근로, daily: 1일 소정근로시간, partTime: 단시간근로자(기간제법 제6조), small: 상시 4명 이하
+  function overtimeDay(o) {
+    const R = OVERTIME, wage = zn(o.wage), work = Math.max(0, zn(o.work)), night = Math.min(Math.max(0, zn(o.night)), work);
+    const small = !!o.small;
+    const daily = Math.min(R.dayLimit, o.daily > 0 ? o.daily : R.dayLimit);
+    let regular = 0, ot = 0, hol8 = 0, holOver = 0;
+    if (o.holiday) { hol8 = Math.min(work, R.dayLimit); holOver = Math.max(0, work - R.dayLimit); }
+    else {
+      const limit = o.partTime && !small ? daily : R.dayLimit;
+      regular = Math.min(work, limit); ot = Math.max(0, work - limit);
+    }
+    const p = small ? { ot: 0, night: 0, hol8: 0, holOver: 0 } : { ot: R.otRate, night: R.nightRate, hol8: R.hol8Rate, holOver: R.holOverRate };
+    const basePay = work * wage;
+    const otPrem = ot * wage * p.ot, nightPrem = night * wage * p.night, hol8Prem = hol8 * wage * p.hol8, holOverPrem = holOver * wage * p.holOver;
+    const premium = otPrem + nightPrem + hol8Prem + holOverPrem;
+    return { wage, work, night, regular, ot, hol8, holOver, small, basePay, otPrem, nightPrem, hol8Prem, holOverPrem, premium, total: basePay + premium };
+  }
+  // 한 달(또는 한 주) 합계로 계산: 연장 시간·야간 시간·휴일 근무 일수 × 하루 시간. 기본급에 들어 있지 않은 추가 근로에 대해 받을 돈
+  function overtimeMonth(o) {
+    const R = OVERTIME, wage = zn(o.wage), small = !!o.small;
+    const ot = Math.max(0, zn(o.ot)), night = Math.max(0, zn(o.night));
+    const days = Math.max(0, Math.floor(zn(o.holDays))), hh = Math.max(0, zn(o.holHours));
+    const hol8 = days * Math.min(hh, R.dayLimit), holOver = days * Math.max(0, hh - R.dayLimit);
+    const otPay = ot * wage * (1 + (small ? 0 : R.otRate));
+    const nightPay = night * wage * (small ? 0 : R.nightRate);
+    const hol8Pay = hol8 * wage * (1 + (small ? 0 : R.hol8Rate));
+    const holOverPay = holOver * wage * (1 + (small ? 0 : R.holOverRate));
+    const total = otPay + nightPay + hol8Pay + holOverPay;
+    const plain = (ot + hol8 + holOver) * wage;
+    return { wage, ot, night, hol8, holOver, small, otPay, nightPay, hol8Pay, holOverPay, total, plain, premium: total - plain };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -1227,6 +1288,7 @@
     FSTOCK, foreignTrade, foreignStockTax, foreignStockPlan,
     GIFT, giftRate, giftTax, giftDeadline,
     VAT, vatCardRule, vatDeadline, simpleVat, generalVat,
+    OVERTIME, hourlyFromMonthly, hm, shiftHours, overtimeDay, overtimeMonth,
     comma, won, korean,
   };
 

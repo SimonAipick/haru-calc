@@ -578,6 +578,34 @@ eq('gv4b cap', C.vatCardRule(2027).cap, 5000000);
 var vd = C.vatDeadline(2026); eq('vd y', vd.getFullYear(), 2027); eq('vd d', vd.getDate(), 25); eq('vd w', vd.getDay(), 1);
 eq('vd2 d', C.vatDeadline(2031).getDate(), 26);
 
+// 연장·야간·휴일 근로수당 (근로기준법 제56조)
+// 합계 방식: 시급 1만원, 연장 10h → 15만, 야간 4h 가산 → 2만, 휴일 1일 10h → 8h×1.5만 + 2h×2만 = 16만 → 33만, 가산분 13만
+var om = C.overtimeMonth({ wage: 10000, ot: 10, night: 4, holDays: 1, holHours: 10 });
+eq('om ot', om.otPay, 150000); eq('om night', om.nightPay, 20000); eq('om hol8', om.hol8Pay, 120000); eq('om holOver', om.holOverPay, 40000);
+eq('om total', om.total, 330000); eq('om premium', om.premium, 130000);
+// 상시 4명 이하: 가산 없이 일한 시간 × 시급만 (연장 10 + 휴일 10 = 20h × 1만), 야간 가산 0
+var oms = C.overtimeMonth({ wage: 10000, ot: 10, night: 4, holDays: 1, holHours: 10, small: true });
+eq('oms total', oms.total, 200000); eq('oms night', oms.nightPay, 0); eq('oms premium', oms.premium, 0);
+// 출퇴근: 18:00~03:00, 휴게 60분(그중 야간 60분) → 근로 8h, 야간 22~03시 5h − 1h = 4h
+var sh = C.shiftHours('18:00', '03:00', 60, 60); eq('sh work', sh.work, 8); eq('sh night', sh.night, 4);
+var sh2 = C.shiftHours('09:00', '18:00', 60, 0); eq('sh2 work', sh2.work, 8); eq('sh2 night', sh2.night, 0);
+var sh3 = C.shiftHours('22:00', '06:00', 0, 0); eq('sh3 work', sh3.work, 8); eq('sh3 night', sh3.night, 8);
+var sh4 = C.shiftHours('04:00', '13:00', 60, 0); eq('sh4 night', sh4.night, 2); eq('sh4 work', sh4.work, 8);
+eq('hm', C.hm('7:30'), 450);
+// 하루: 시급 10,320원, 11시간(야간 1시간) 평일 → 8h 82,560 + 연장 3h×15,480 = 46,440 + 야간 가산 5,160 = 134,160
+var od = C.overtimeDay({ wage: 10320, work: 11, night: 1 });
+eq('od ot', od.ot, 3); eq('od otPrem', od.otPrem, 15480); eq('od nightPrem', od.nightPrem, 5160); eq('od total', od.total, 134160);
+// 휴일 10시간 → 8h×15,480 = 123,840 + 2h×20,640 = 41,280 → 165,120
+var oh = C.overtimeDay({ wage: 10320, work: 10, holiday: true });
+eq('oh hol8', oh.hol8, 8); eq('oh holOver', oh.holOver, 2); eq('oh total', oh.total, 165120);
+// 단시간근로자(1일 소정 5시간)가 7시간 → 2시간 초과근로 50% 가산(기간제법 제6조③): 72,240 + 10,320 = 82,560
+eq('opt total', C.overtimeDay({ wage: 10320, work: 7, daily: 5, partTime: true }).total, 82560);
+// 통상근로자 소정 5시간(법내 초과)·4명 이하 단시간은 가산 없음
+eq('opt2 total', C.overtimeDay({ wage: 10320, work: 7, daily: 5 }).total, 72240);
+eq('opt3 premium', C.overtimeDay({ wage: 10320, work: 7, daily: 5, partTime: true, small: true }).premium, 0);
+// 월 통상임금 2,156,880원 ÷ 209시간 = 10,320원
+eq('hourly', C.hourlyFromMonthly(2156880), 10320, 0.001);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

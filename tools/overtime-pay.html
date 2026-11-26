@@ -1,0 +1,184 @@
+<!--
+{"slug": "overtime-pay", "title": "연장·야간·휴일 근로수당 계산기", "category": "직장·급여", "order": 3.5,
+ "short": "야근·밤샘·휴일 근무 수당",
+ "description": "시급(또는 월급)과 일한 시간을 넣으면 연장근로 1.5배, 야간근로(밤 10시~새벽 6시) 0.5배 가산, 휴일근로 8시간까지 1.5배·넘으면 2배를 계산합니다. 출퇴근 시각만 넣으면 야간 시간도 자동으로 나누고, 5인 미만 사업장과 단시간 근로자 규칙도 반영합니다.",
+ "lead": "연말 야근, 밤샘 근무, 휴일 출근 수당을 근로기준법 제56조 기준으로 계산합니다. 출퇴근 시각으로 하루를 계산하거나, 한 달 시간을 합쳐서 계산할 수 있습니다."}
+-->
+<!-- 근거 (2026-11-26 law.go.kr 원문 확인)
+     근로기준법 [법률 제21533호, 시행 2026. 10. 8.] https://www.law.go.kr/법령/근로기준법
+       제2조①8호 소정근로시간, 제49조 임금채권 시효 3년, 제11조① 상시 5명 이상 적용 ② 4명 이하는 대통령령으로 일부 적용,
+       제50조 1주 40시간·1일 8시간(휴게시간 제외), 제53조① 합의 시 1주 12시간 한도 연장,
+       제55조① 1주 평균 1회 이상 유급휴일 ② 대통령령으로 정하는 휴일(관공서 공휴일) 유급 (5인 이상 30명 미만은 2022-01-01부터),
+       제56조① 연장근로 통상임금 50% 이상 가산 ② 휴일근로 8시간 이내 50%, 8시간 초과 100% ③ 야간근로(22시~다음 날 6시) 50%
+       제57조 보상휴가제(서면 합의로 수당 대신 휴가)
+     근로기준법 시행령 [대통령령 제35436호, 시행 2025. 10. 23.] 제7조 → 별표 1(4명 이하 적용 규정). 별표는 이미지라 글자로 확인 못 함 →
+       고용노동부 빠른인터넷상담 답변(5인 미만은 연장·휴일·야간 가산수당 미적용, 일한 시간의 임금은 지급)으로 확인
+       https://www.moel.go.kr/minwon/fastcounsel/fastcounselView.do?inetDcssMngId=202504110509275750327
+     기간제 및 단시간근로자 보호 등에 관한 법률 [법률 제18177호, 시행 2021. 5. 18.] 제3조① 상시 5인 이상,
+       제6조① 단시간근로자 소정근로시간 초과 시 동의, 1주 12시간 한도 ③ 초과근로 통상임금 50% 이상 가산
+       https://www.law.go.kr/법령/기간제및단시간근로자보호등에관한법률 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>계산 방식</legend>
+    <div class="seg">
+      <label><input type="radio" name="mode" value="day" checked> 하루 근무 (출퇴근 시각)</label>
+      <label><input type="radio" name="mode" value="month"> 한 달 합계 (시간 입력)</label>
+    </div>
+  </fieldset>
+  <div class="grid2">
+    <label>통상시급 <small>또는 아래에서 월급 선택</small><input class="money" id="wage" inputmode="numeric" value="10320"></label>
+    <label>입력한 금액은
+      <select id="wageKind">
+        <option value="hour" selected>시급</option>
+        <option value="month">월 통상임금 (÷ 209시간)</option>
+      </select>
+    </label>
+  </div>
+  <label class="check"><input type="checkbox" id="small"> 상시 근로자가 4명 이하인 사업장이다 (가산수당 없음)</label>
+
+  <div id="box-day">
+    <div class="grid2">
+      <label>출근 시각<input type="time" id="start" value="09:00"></label>
+      <label>퇴근 시각 <small>다음 날 새벽이면 그대로</small><input type="time" id="end" value="21:00"></label>
+      <label>휴게시간 (분)<input type="number" id="brk" inputmode="numeric" min="0" step="10" value="60"></label>
+      <label>그중 밤 10시~새벽 6시에 쉰 시간 (분)<input type="number" id="nbrk" inputmode="numeric" min="0" step="10" value="0"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="holiday"> 이날은 휴일이다 (주휴일, 공휴일, 회사가 정한 휴일)</label>
+    <label class="check"><input type="checkbox" id="partTime"> 주 40시간보다 적게 일하기로 계약한 단시간 근로자다</label>
+    <div id="box-part" hidden>
+      <label>계약한 하루 근로시간 (소정근로시간)<input type="number" id="daily" inputmode="decimal" min="1" max="8" step="0.5" value="5"></label>
+    </div>
+  </div>
+
+  <div id="box-month" hidden>
+    <div class="grid2">
+      <label>연장근로 시간 <small>평일 하루 8시간·주 40시간 넘은 시간</small><input type="number" id="ot" inputmode="decimal" min="0" step="0.5" placeholder="예: 12"></label>
+      <label>야간근로 시간 <small>밤 10시~새벽 6시에 일한 시간 전부</small><input type="number" id="night" inputmode="decimal" min="0" step="0.5" placeholder="예: 6"></label>
+      <label>휴일에 일한 날 수<input type="number" id="holDays" inputmode="numeric" min="0" step="1" placeholder="예: 2"></label>
+      <label>휴일 하루 근로시간 <small>휴게시간 뺀 시간</small><input type="number" id="holHours" inputmode="decimal" min="0" max="24" step="0.5" placeholder="예: 8"></label>
+    </div>
+  </div>
+  <button type="submit">수당 계산하기</button>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+(function () {
+  function sync() {
+    const m = UI.val('mode') === 'month';
+    UI.$('box-day').hidden = m;
+    UI.$('box-month').hidden = !m;
+    UI.$('box-part').hidden = !UI.$('partTime').checked;
+  }
+  document.querySelectorAll('input[name="mode"]').forEach(function (el) { el.addEventListener('change', sync); });
+  UI.$('partTime').addEventListener('change', sync);
+  sync();
+  const h = function (x) { return Calc.comma(Math.round(x * 100) / 100, 2) + '시간'; };
+
+  UI.bind('f', 'out', function () {
+    const raw = UI.num('wage');
+    if (!raw) return null;
+    const wage = UI.val('wageKind') === 'month' ? Calc.hourlyFromMonthly(raw) : raw;
+    const small = UI.$('small').checked;
+    const notes = [];
+    if (UI.val('wageKind') === 'month') notes.push('월 통상임금 ' + Calc.won(raw) + ' ÷ 209시간 = 통상시급 <strong>' + Calc.won(Math.round(wage)) + '</strong>으로 계산했습니다. 주 40시간이 아니면 계약서의 월 기준시간으로 나눈 시급을 직접 넣으세요.');
+    if (wage < 10320) notes.push('통상시급이 2026년 최저시급(10,320원)보다 낮습니다. 2027년 1월부터는 10,700원입니다.');
+    if (small) notes.push('상시 4명 이하 사업장은 근로기준법 제56조(가산수당)가 적용되지 않아 일한 시간만큼 시급으로 계산했습니다. 근로계약서나 취업규칙에 가산수당을 주기로 정했다면 그 약속대로 받습니다.');
+
+    if (UI.val('mode') === 'day') {
+      const s = Calc.shiftHours(UI.val('start'), UI.val('end'), UI.num('brk'), UI.num('nbrk'));
+      if (!s || s.work <= 0) return null;
+      const r = Calc.overtimeDay({ wage: wage, work: s.work, night: s.night, holiday: UI.$('holiday').checked,
+        partTime: UI.$('partTime').checked, daily: UI.num('daily'), small: small });
+      const rows = [['실제 근로시간 (휴게 제외)', h(r.work)], ['그중 야간 (22시~06시)', h(r.night)],
+        ['일한 시간 전부 × 시급', Calc.won(Math.round(r.basePay))]];
+      if (r.ot) rows.push(['연장근로 ' + h(r.ot) + ' 가산 (50%)', small ? '0원' : '+ ' + Calc.won(Math.round(r.otPrem))]);
+      if (r.hol8) rows.push(['휴일근로 8시간 이내 ' + h(r.hol8) + ' 가산 (50%)', small ? '0원' : '+ ' + Calc.won(Math.round(r.hol8Prem))]);
+      if (r.holOver) rows.push(['휴일근로 8시간 초과 ' + h(r.holOver) + ' 가산 (100%)', small ? '0원' : '+ ' + Calc.won(Math.round(r.holOverPrem))]);
+      if (r.night) rows.push(['야간근로 ' + h(r.night) + ' 가산 (50%)', small ? '0원' : '+ ' + Calc.won(Math.round(r.nightPrem))]);
+      rows.push(['가산수당 합계', Calc.won(Math.round(r.premium))]);
+      if (!UI.$('holiday').checked && !UI.$('partTime').checked && r.work > 0 && r.work <= 8) notes.push('하루 8시간 이하라 이날만 보면 연장근로가 없습니다. 다만 이번 주 근로시간이 이날까지 40시간을 넘었다면 넘은 시간도 연장근로(50% 가산)입니다. 그런 주는 \'한 달 합계\'로 계산하세요.');
+      if (r.work > 8 + 4) notes.push('하루 ' + h(r.work) + '은 긴 근무입니다. 연장근로는 당사자 합의가 있어도 1주 12시간까지입니다(제53조①).');
+      if (UI.$('partTime').checked && small) notes.push('단시간 근로자 초과근로 가산(기간제법 제6조③)도 상시 5인 이상 사업장에만 적용됩니다.');
+      if (UI.$('holiday').checked) notes.push('월급제라면 유급휴일의 하루치 임금은 월급에 이미 들어 있고, 위 금액(휴일근로 임금 + 가산)을 따로 더 받습니다. 시급제 아르바이트는 주휴수당을 별도로 확인하세요.');
+      notes.push('야간 가산은 연장·휴일 가산과 겹쳐서 붙습니다. 예를 들어 평일 연장근로가 밤 10시 이후면 시급의 2배(100% + 연장 50% + 야간 50%)입니다.');
+      return UI.result(['이날 받을 임금 (가산 포함)', Calc.won(Math.round(r.total))], rows, notes);
+    }
+
+    const r = Calc.overtimeMonth({ wage: wage, ot: UI.num('ot'), night: UI.num('night'), holDays: UI.num('holDays'), holHours: UI.num('holHours'), small: small });
+    if (!r.ot && !r.night && !r.hol8 && !r.holOver) return null;
+    const rows = [];
+    if (r.ot) rows.push(['연장근로 ' + h(r.ot) + ' × 시급 × ' + (small ? '1' : '1.5'), Calc.won(Math.round(r.otPay))]);
+    if (r.hol8) rows.push(['휴일근로 8시간 이내 ' + h(r.hol8) + ' × ' + (small ? '1' : '1.5'), Calc.won(Math.round(r.hol8Pay))]);
+    if (r.holOver) rows.push(['휴일근로 8시간 초과 ' + h(r.holOver) + ' × ' + (small ? '1' : '2'), Calc.won(Math.round(r.holOverPay))]);
+    if (r.night) rows.push(['야간근로 가산 ' + h(r.night) + ' × 시급 × ' + (small ? '0' : '0.5'), Calc.won(Math.round(r.nightPay))]);
+    rows.push(['그중 법정 가산분', Calc.won(Math.round(r.premium))]);
+    notes.push('연장·휴일근로는 일한 시간의 임금(100%)과 가산분을 합친 금액입니다. 야간근로는 그 시간의 임금이 기본급이나 연장·휴일 수당에 이미 들어 있으므로 가산분(50%)만 더했습니다.');
+    if (r.ot > 52) notes.push('연장근로는 1주 12시간까지라(제53조①) 한 달(약 4.3주)이면 보통 52시간을 넘을 수 없습니다. 입력한 시간을 다시 확인해 보세요.');
+    if (r.hol8 && !r.holOver && UI.num('holHours') < 8) notes.push('휴일근로가 하루 8시간을 넘으면 넘는 시간은 2배(100% 가산)입니다.');
+    return UI.result(['추가로 받을 수당', Calc.won(Math.round(r.total))], rows, notes);
+  });
+})();
+</script>
+<!-- guide -->
+<h2>연장·야간·휴일 근로수당 계산 공식</h2>
+<p class="formula">연장근로수당 = 연장 시간 × 통상시급 × 1.5</p>
+<p class="formula">야간근로 가산 = 밤 10시~새벽 6시 근로시간 × 통상시급 × 0.5</p>
+<p class="formula">휴일근로수당 = 8시간까지 × 통상시급 × 1.5 + 8시간 넘은 시간 × 통상시급 × 2</p>
+<p>근로기준법 제56조는 연장근로에 통상임금의 50% 이상, 휴일근로에 8시간까지 50%·8시간 초과분 100% 이상, 야간근로(오후 10시부터 다음 날 오전 6시)에 50% 이상을 더 주도록 정하고 있습니다. 법은 최저 기준이라, 회사 규정이 더 많이 주면 그 규정을 따릅니다.</p>
+
+<h2>상황별 배율 한눈에 보기 (5인 이상 사업장)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>언제 일했나</th><th>시급의 몇 배</th><th>2026년 최저시급 기준 1시간</th></tr></thead>
+  <tbody>
+    <tr><td>평일 소정근로 (낮)</td><td>1배</td><td>10,320원</td></tr>
+    <tr><td>평일 소정근로 (밤 10시 이후)</td><td>1.5배</td><td>15,480원</td></tr>
+    <tr><td>평일 연장근로 (낮)</td><td>1.5배</td><td>15,480원</td></tr>
+    <tr><td>평일 연장근로 (밤 10시 이후)</td><td>2배</td><td>20,640원</td></tr>
+    <tr><td>휴일 8시간 이내 (낮)</td><td>1.5배</td><td>15,480원</td></tr>
+    <tr><td>휴일 8시간 이내 (밤)</td><td>2배</td><td>20,640원</td></tr>
+    <tr><td>휴일 8시간 초과 (낮)</td><td>2배</td><td>20,640원</td></tr>
+    <tr><td>휴일 8시간 초과 (밤)</td><td>2.5배</td><td>25,800원</td></tr>
+  </tbody>
+</table>
+</div>
+<p>2027년 1월 1일부터 최저시급은 10,700원으로 오릅니다(2026년 8월 고용노동부 고시). 시급이 다르면 위 배율에 본인 통상시급을 곱하면 됩니다.</p>
+
+<h2>연장근로는 언제부터인가요?</h2>
+<ul>
+  <li>법정 근로시간은 휴게시간을 빼고 <strong>하루 8시간, 1주 40시간</strong>입니다(제50조). 이를 넘는 시간이 연장근로입니다.</li>
+  <li>하루 8시간 이하로 일해도 그 주 합계가 40시간을 넘으면 넘는 시간은 연장근로입니다. 예를 들어 하루 7시간씩 6일(42시간)을 일하면 2시간이 연장근로입니다.</li>
+  <li>연장근로는 당사자가 합의해도 <strong>1주 12시간</strong>까지입니다(제53조①).</li>
+  <li>주 40시간보다 적게 일하기로 한 <strong>단시간 근로자</strong>(아르바이트 등)는 계약한 시간을 넘는 순간부터 50%를 더 받습니다(기간제법 제6조③). 예를 들어 하루 5시간 계약인데 7시간 일했다면 2시간이 초과근로입니다. 이 규정도 5인 이상 사업장에 적용됩니다.</li>
+</ul>
+
+<h2>5인 미만 사업장은 어떻게 되나요?</h2>
+<p>근로기준법은 상시 5명 이상 사업장에 전부 적용되고, 4명 이하 사업장에는 시행령 별표 1에 적힌 규정만 적용됩니다(제11조). 가산수당을 정한 제56조는 여기에 들어 있지 않아서, 4명 이하 사업장은 연장·야간·휴일에 일해도 <strong>일한 시간만큼의 시급</strong>만 주면 법 위반이 아닙니다. 고용노동부 상담 답변도 같은 취지입니다.</p>
+<p>다만 주휴일(제55조①)과 최저임금은 4명 이하 사업장에도 적용됩니다. 근로계약서에 가산수당을 주기로 적었다면 그 약속대로 받을 수 있습니다. 상시 근로자 수는 판단할 일이 생긴 날 전 1개월 동안 쓴 근로자 연인원을 그 기간 가동 일수로 나눠서 셉니다(시행령 제7조의2).</p>
+
+<h2>휴일근로란?</h2>
+<p>휴일은 1주에 1번 이상 주는 주휴일(보통 일요일)과 관공서 공휴일, 근로자의 날, 회사가 취업규칙이나 단체협약으로 정한 휴일입니다. 주 5일제 회사의 <strong>토요일</strong>은 대부분 휴일이 아니라 '쉬는 날(휴무일)'이라서, 토요일 근무는 휴일근로가 아니라 연장근로(주 40시간 초과분)로 계산하는 경우가 많습니다. 회사 취업규칙에서 토요일을 휴일로 정했다면 휴일근로입니다.</p>
+<p>휴일근로와 연장근로 가산은 겹치지 않습니다. 휴일에 10시간 일하면 8시간은 1.5배, 2시간은 2배이고, 여기에 연장 가산을 또 붙이지 않습니다(2018년 개정 제56조②). 반면 야간 가산은 연장·휴일 가산과 별도로 더해집니다.</p>
+
+<h2>통상시급은 어떻게 구하나요?</h2>
+<p>가산수당의 기준은 <strong>통상임금</strong>입니다. 기본급처럼 정해진 근로에 대해 정기적·일률적으로 주는 임금이고, 실적에 따라 달라지는 성과급이나 연장근로수당 자체는 빠집니다. 월급제라면 월 통상임금을 월 기준시간으로 나눕니다. 주 40시간 근무라면 주휴시간을 포함한 <strong>209시간</strong>(주 48시간 × 365일 ÷ 7 ÷ 12)이 흔히 쓰입니다.</p>
+<p>예를 들어 월 통상임금이 300만원이면 통상시급은 3,000,000 ÷ 209 ≈ 14,354원이고, 연장근로 1시간은 약 21,531원입니다.</p>
+
+<h2>계산 예시</h2>
+<h3>평일 오전 9시 출근, 밤 11시 퇴근 (휴게 1시간, 시급 10,320원)</h3>
+<p>근로시간은 13시간, 그중 8시간 넘는 5시간이 연장근로, 밤 10~11시 1시간이 야간근로입니다.</p>
+<ul>
+  <li>일한 시간 전부: 13 × 10,320 = 134,160원</li>
+  <li>연장 가산: 5 × 5,160 = 25,800원</li>
+  <li>야간 가산: 1 × 5,160 = 5,160원</li>
+  <li>합계: <strong>165,120원</strong></li>
+</ul>
+<h3>일요일(주휴일)에 10시간 근무 (시급 10,320원)</h3>
+<p>8시간 × 15,480원 = 123,840원, 2시간 × 20,640원 = 41,280원, 합계 <strong>165,120원</strong>입니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>수당 대신 휴가로 받을 수 있나요?</h3>
+<p>근로자대표와 서면 합의가 있으면 연장·야간·휴일근로 수당 대신 휴가를 줄 수 있습니다(제57조 보상휴가제). 법은 '임금을 지급하는 것을 갈음하여' 휴가를 준다고 정하고 있어, 가산분까지 포함한 임금에 맞먹는 휴가인지 합의 내용을 확인하세요.</p>
+<h3>수당을 못 받았어요.</h3>
+<p>임금 체불은 고용노동부 노동포털이나 가까운 지방고용노동관서에 진정할 수 있고, 고용노동부 고객상담센터(국번 없이 1350)에서 상담받을 수 있습니다. 임금채권은 3년 동안 청구하지 않으면 시효로 사라집니다(제49조).</p>
+<p class="note">이 계산기는 법정 최저 기준을 계산합니다. 탄력적·선택적 근로시간제, 근로시간 적용 제외 업종(제63조), 18세 미만 근로자(하루 7시간·주 35시간) 등은 다르게 계산되니 회사 규정과 함께 확인하세요.</p>
