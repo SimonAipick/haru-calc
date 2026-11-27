@@ -75,7 +75,7 @@ eq('br monthly x100', C.brokerage('lease', 0, 1e7, 5e5).fee, 240000);
 var bm = C.brokerage('lease', 0, 5e6, 3e5);
 eq('br monthly x70 amount', bm.amount, 26000000); eq('br monthly x70 fee', bm.fee, 130000);
 // 전월세 전환율
-eq('conv legal', C.legalConversionRate(), 5); eq('conv cap 10', C.legalConversionRate(9), 10);
+eq('conv legal', C.legalConversionRate(), 5.25); eq('conv legal old', C.legalConversionRate(3.0), 5); eq('conv cap 10', C.legalConversionRate(9), 10);
 // 전역일
 function ymd(d) { return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 eq('dc army', ymd(C.discharge(D('2026-01-05'), 18)), '2027-7-4');

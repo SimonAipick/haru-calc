@@ -118,7 +118,7 @@
   }
 
   // 전월세 전환율 상한 (주택임대차보호법 시행령 제9조) = min(10%, 기준금리 + 2%p)
-  const BASE_RATE = { value: 3.0, asOf: '2026-08-27' };
+  const BASE_RATE = { value: 3.25, asOf: '2026-11-26' };
   function legalConversionRate(base) {
     return Math.min(10, (base == null ? BASE_RATE.value : base) + 2);
   }
