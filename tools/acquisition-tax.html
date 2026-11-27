@@ -1,0 +1,113 @@
+<!--
+{"slug": "acquisition-tax", "title": "주택 취득세 계산기", "category": "금융", "order": 16,
+ "short": "1~3% 세율, 지방교육세·농특세, 생애최초 감면",
+ "description": "집을 살 때 내는 취득세를 계산합니다. 6억·9억 구간 세율(6억 초과 9억 이하는 1.01~2.99%), 지방교육세, 85㎡ 초과 주택의 농어촌특별세, 생애최초 주택 구입 감면(200만원·300만원, 12억 이하, 2028년 말까지), 다주택 중과 8%·12%까지 2026년 법령 원문 기준으로 보여 줍니다.",
+ "lead": "집값(취득당시가액)과 전용면적만 넣으면 취득세, 지방교육세, 농어촌특별세와 합계를 계산합니다. 잔금일(취득일)부터 60일 안에 신고·납부합니다."}
+-->
+<!-- 근거 (2026-11-27 law.go.kr 원문 확인):
+     지방세법 (법률 제21308호, 시행 2026. 7. 1.) https://www.law.go.kr/법령/지방세법
+       제11조①8호 주택 유상거래 세율(6억 이하 1천분의 10, 6억 초과 9억 이하 (가액×2/3억원−3)×1/100 소수점 다섯째 자리 반올림, 9억 초과 1천분의 30),
+       제20조① 취득일부터 60일 신고·납부, 제13조의2① 법인·다주택 중과(중과기준세율의 100분의 200·400), 제151조①1호 지방교육세(제11조①8호는 세율×50%의 20%, 중과는 7호나목 세율−중과기준세율의 20%)
+     농어촌특별세법 (법률 제21611호, 시행 2026. 5. 12.) https://www.law.go.kr/법령/농어촌특별세법
+       제4조9호·11호 서민주택 비과세, 제5조①1호 감면세액의 100분의 20, 제5조①6호 표준세율을 100분의 2로 적용한 취득세액의 100분의 10
+     농어촌특별세법 시행령 (대통령령 제35947호) 제4조⑤ 서민주택 = 주택법 제2조제6호 국민주택규모 이하
+     지방세특례제한법 (법률 제21738호, 시행 2026. 6. 2.) https://www.law.go.kr/법령/지방세특례제한법
+       제36조의3 생애최초 주택 구입 감면(12억 이하, 200만원/300만원, 2028년 12월 31일까지, 3년 안 매각·임대 시 추징) -->
+<form id="f" class="calc" novalidate>
+  <label>집값 (취득당시가액, 보통 실제 매매가)<input class="money" id="price" inputmode="numeric" placeholder="예: 700,000,000"></label>
+  <fieldset>
+    <legend>전용면적</legend>
+    <div class="seg">
+      <label><input type="radio" name="area" value="small" checked> 85㎡ 이하</label>
+      <label><input type="radio" name="area" value="big"> 85㎡ 초과</label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>몇 번째 집인가요? (사는 집 포함, 세대 기준)</legend>
+    <div class="seg">
+      <label><input type="radio" name="mode" value="normal" checked> 1주택·일반</label>
+      <label><input type="radio" name="mode" value="heavy8"> 중과 8%</label>
+      <label><input type="radio" name="mode" value="heavy12"> 중과 12%</label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>생애최초 주택 구입 감면</legend>
+    <div class="seg">
+      <label><input type="radio" name="first" value="0" checked> 해당 없음</label>
+      <label><input type="radio" name="first" value="2000000"> 일반 (200만원)</label>
+      <label><input type="radio" name="first" value="3000000"> 소형·인구감소지역 (300만원)</label>
+    </div>
+  </fieldset>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.bind('f', 'out', function () {
+  const price = UI.num('price');
+  if (!price) return null;
+  const big = UI.val('area') === 'big', first = Number(UI.val('first')), mode = UI.val('mode');
+  const r = Calc.acqTax({ price, big, mode, first });
+  const pct = (x) => (Math.round(x * 1e6) / 1e4).toFixed(2) + '%';
+  const rows = [['취득세율', pct(r.rate)], ['취득세', Calc.won(r.acq)]];
+  if (r.relief) rows.push(['생애최초 감면', '− ' + Calc.won(r.relief)]);
+  rows.push(['지방교육세', Calc.won(r.edu)]);
+  rows.push(['농어촌특별세', r.farm == null ? '따로 확인 (아래 설명)' : (r.farm ? Calc.won(r.farm) : '없음 (85㎡ 이하 비과세)')]);
+  rows.push(['합계의 집값 대비', pct(r.total / price)]);
+  const notes = ['잔금을 치르거나 등기한 날 중 빠른 날(취득일)부터 60일 안에 신고·납부해야 가산세가 붙지 않습니다.',
+    '지방세는 10원 미만을 버리는 등 끝자리 처리로 실제 고지서와 몇 원 다를 수 있습니다.'];
+  if (first && price > Calc.ACQ.firstMax) notes.unshift('집값이 12억원을 넘어 생애최초 감면을 받을 수 없습니다.');
+  if (first && mode !== 'normal') notes.unshift('생애최초 감면을 받으면 다주택 중과세율을 적용하지 않습니다(지방세특례제한법 제36조의3①). 일반 세율로 계산했습니다.');
+  if (r.relief) notes.push('감면받은 뒤 3년 안에 팔거나 증여하거나 임대하면 감면받은 취득세를 다시 냅니다.');
+  if (r.relief && big) notes.push('85㎡ 초과 주택은 감면받은 취득세의 20%를 농어촌특별세로 냅니다(농어촌특별세법 제5조①1호). 위 금액에 포함했습니다.');
+  if (r.farmUnknown) notes.push('중과 주택의 85㎡ 초과 농어촌특별세는 계산 방식 확인이 필요해 합계에 넣지 않았습니다. 위택스 취득세 계산기로 확인하세요.');
+  return UI.result([r.farmUnknown ? '낼 세금 (농특세 제외)' : '낼 세금 합계', Calc.won(r.total)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>주택 취득세율 (개인이 사는 경우)</h2>
+<p>지방세법 제11조①8호에 따라 집값(취득당시가액)에 따라 세율이 정해집니다. 6억원 초과 9억원 이하는 금액에 비례해 1%에서 3%로 올라갑니다.</p>
+<p class="formula">6억 초과 9억 이하 세율 = (집값 × 2 ÷ 3억원 − 3) × 1/100 (소수점 다섯째 자리에서 반올림)</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>집값</th><th>취득세</th><th>지방교육세</th><th>농특세 (85㎡ 초과만)</th><th>합계</th></tr></thead>
+  <tbody>
+    <tr><td>6억원 이하</td><td>1%</td><td>0.1%</td><td>0.2%</td><td>1.1% (85㎡ 초과 1.3%)</td></tr>
+    <tr><td>7억원</td><td>1.67%</td><td>0.167%</td><td>0.2%</td><td>1.837% (2.037%)</td></tr>
+    <tr><td>8억원</td><td>2.33%</td><td>0.233%</td><td>0.2%</td><td>2.563% (2.763%)</td></tr>
+    <tr><td>9억원 초과</td><td>3%</td><td>0.3%</td><td>0.2%</td><td>3.3% (3.5%)</td></tr>
+  </tbody>
+</table>
+</div>
+<p>지방교육세는 취득세율의 절반에 20%를 곱한 비율(지방세법 제151조)이라 취득세의 10%와 같습니다. 농어촌특별세는 집값의 0.2%인데, 전용 85㎡ 이하(국민주택규모) 주택은 비과세입니다.</p>
+
+<h2>예시: 7억원 아파트, 전용 84㎡</h2>
+<p>세율 = (7억 × 2 ÷ 3억 − 3) ÷ 100 = 0.016667 → <strong>1.67%</strong>. 취득세 1,169만원, 지방교육세 116만 9천원, 농특세 없음(85㎡ 이하). 합계 <strong>1,285만 9천원</strong>입니다. 같은 값의 전용 102㎡라면 농특세 140만원이 더해져 1,425만 9천원입니다.</p>
+
+<h2>생애최초 주택 구입 감면 (2028년 12월 31일까지)</h2>
+<p>본인과 배우자 모두 주택을 가진 적이 없고, 직접 살 집을 12억원 이하로 사면 취득세를 줄여 줍니다(지방세특례제한법 제36조의3). 미성년자는 받을 수 없습니다.</p>
+<ul>
+  <li><strong>300만원까지:</strong> 전용 60㎡ 이하이고 3억원(수도권 6억원) 이하인 아파트가 아닌 공동주택(연립·다세대), 도시형 생활주택, 호수별 면적이 구분된 다가구주택, 그리고 인구감소지역에 있는 주택</li>
+  <li><strong>200만원까지:</strong> 그 밖의 주택 (아파트 포함)</li>
+</ul>
+<p>취득세가 한도 이하이면 전액 면제, 넘으면 한도만큼 뺍니다. 둘이 공동명의로 사도 감면 합계는 같은 한도입니다. 산 날부터 3년 안에 팔거나 증여하거나 임대하면 감면받은 세금을 다시 냅니다.</p>
+
+<h2>다주택 중과 (지방세법 제13조의2)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>새로 사는 집이</th><th>조정대상지역</th><th>그 밖의 지역</th></tr></thead>
+  <tbody>
+    <tr><td>1세대 2주택째</td><td>8% (일시적 2주택은 제외)</td><td>일반 1~3%</td></tr>
+    <tr><td>1세대 3주택째</td><td>12%</td><td>8%</td></tr>
+    <tr><td>1세대 4주택째 이상</td><td>12%</td><td>12%</td></tr>
+    <tr><td>법인</td><td colspan="2">12%</td></tr>
+  </tbody>
+</table>
+</div>
+<p>중과일 때 지방교육세는 집값의 0.4%입니다. 조합원입주권, 분양권, 주택분 재산세를 내는 오피스텔도 주택 수에 들어가고(제13조의3), 시행령에서 정한 저가 주택 등은 중과에서 빠집니다. 조정대상지역은 정부 발표로 바뀌므로 계약 전에 꼭 확인하세요.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>취득세는 언제까지 내나요?</h3>
+<p>취득일(잔금일과 등기일 중 빠른 날)부터 60일 안에 시·군·구청이나 위택스로 신고하고 냅니다. 보통 등기할 때 법무사가 함께 처리합니다.</p>
+<h3>분양권이나 오피스텔도 이 세율인가요?</h3>
+<p>아닙니다. 이 계산기는 주택(주거용 건축물과 부속토지)을 사는 경우입니다. 오피스텔 매입은 4%(그 밖의 부동산 세율)가 적용되는 등 다르게 계산합니다.</p>
+<h3>중개보수도 함께 알고 싶어요.</h3>
+<p><a href="../brokerage-fee/">중개보수(복비) 계산기</a>로 같은 집값의 중개보수 상한을 확인할 수 있습니다. 집을 산 뒤 해마다 내는 세금은 <a href="../jongbu/">종합부동산세 계산기</a>에서 볼 수 있습니다.</p>

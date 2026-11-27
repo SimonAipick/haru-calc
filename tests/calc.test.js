@@ -606,6 +606,19 @@ eq('opt3 premium', C.overtimeDay({ wage: 10320, work: 7, daily: 5, partTime: tru
 // 월 통상임금 2,156,880원 ÷ 209시간 = 10,320원
 eq('hourly', C.hourlyFromMonthly(2156880), 10320, 0.001);
 
+// 주택 취득세 (지방세법 제11조①8호·제13조의2·제151조, 농특세법 제4·5조, 지특법 제36조의3) — 손 계산
+eq('acq rate 7억', C.acqRate(700000000), 0.0167, 1e-9); eq('acq rate 9억', C.acqRate(900000000), 0.03, 1e-9); eq('acq rate 6억', C.acqRate(600000000), 0.01, 1e-9);
+var a1 = C.acqTax({ price: 500000000 }); eq('acq 5억 tax', a1.acq, 5000000, 0); eq('acq 5억 edu', a1.edu, 500000, 0); eq('acq 5억 total', a1.total, 5500000, 0);
+var a2 = C.acqTax({ price: 700000000, big: true }); eq('acq 7억 tax', a2.acq, 11690000, 0); eq('acq 7억 edu', a2.edu, 1169000, 0); eq('acq 7억 farm', a2.farm, 1400000, 0); eq('acq 7억 total', a2.total, 14259000, 0);
+eq('acq 10억 big total', C.acqTax({ price: 1000000000, big: true }).total, 35000000, 0);
+var a4 = C.acqTax({ price: 400000000, first: 2000000 }); eq('acq first 4억', a4.acqPay, 2000000, 0); eq('acq first 4억 total', a4.total, 2400000, 0);
+eq('acq first 300 exempt', C.acqTax({ price: 300000000, first: 3000000 }).total, 300000, 0);
+var a6 = C.acqTax({ price: 800000000, big: true, first: 2000000 }); eq('acq first 8억 rate', a6.rate, 0.0233, 1e-9); eq('acq first 8억 farm', a6.farm, 2000000, 0); eq('acq first 8억 total', a6.total, 20504000, 0);
+eq('acq first over 12억', C.acqTax({ price: 1300000000, first: 2000000 }).relief, 0, 0);
+var a8 = C.acqTax({ price: 600000000, mode: 'heavy8' }); eq('acq heavy8', a8.acq, 48000000, 0); eq('acq heavy8 edu', a8.edu, 2400000, 0);
+eq('acq heavy12', C.acqTax({ price: 600000000, mode: 'heavy12' }).acq, 72000000, 0);
+eq('acq first blocks heavy', C.acqTax({ price: 500000000, mode: 'heavy8', first: 2000000 }).rate, 0.01, 1e-9);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

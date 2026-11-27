@@ -1267,6 +1267,38 @@
     return { wage, ot, night, hol8, holOver, small, otPay, nightPay, hol8Pay, holOverPay, total, plain, premium: total - plain };
   }
 
+  // ---------- 주택 취득세 (개인 유상거래) ----------
+  // 지방세법(법률 제21308호, 시행 2026. 7. 1.) 제11조①8호: 6억 이하 1%, 6억 초과 9억 이하 (가액×2/3억원 − 3)×1/100
+  // (소수점 이하 다섯째 자리 반올림), 9억 초과 3%. 제13조의2①: 조정 2주택·비조정 3주택 4%+2%×2=8%, 조정 3주택+·비조정 4주택+ 12%.
+  // 제151조①1호: 지방교육세 = 일반 세율×50%×20%, 중과는 (4%−2%)×20% = 0.4%.
+  // 농어촌특별세법(법률 제21611호) 제5조①6호: 표준세율을 2%로 적용한 취득세액의 10%(=가액의 0.2%), 제5조①1호: 감면세액의 20%,
+  // 제4조9호·11호 + 시행령 제4조⑤: 국민주택규모 이하 서민주택은 취득세·감면분 농특세 비과세.
+  // 지방세특례제한법(법률 제21738호) 제36조의3: 생애최초, 12억 이하, 200만원(소형 비아파트·인구감소지역 300만원) 공제, 2028-12-31까지.
+  const ACQ = { firstMax: 1200000000, firstUntil: '2028-12-31', heavyEdu: 0.004 };
+  function acqRate(price) {
+    if (price <= 600000000) return 0.01;
+    if (price > 900000000) return 0.03;
+    const r = (price * 2 / 300000000 - 3) / 100;
+    return Math.round(r * 10000 + 1e-9) / 10000;
+  }
+  function acqTax(o) {
+    const price = Math.max(0, o.price || 0), big = !!o.big;
+    const firstCap = o.first && price <= ACQ.firstMax ? o.first : 0;
+    const mode = firstCap ? 'normal' : (o.mode || 'normal'); // 생애최초 감면 시 제13조의2 중과 미적용
+    if (mode !== 'normal') {
+      const rate = mode === 'heavy12' ? 0.12 : 0.08;
+      const acq = Math.floor(price * rate), edu = Math.floor(price * ACQ.heavyEdu);
+      return { price, mode, rate, acq, relief: 0, acqPay: acq, edu, farm: big ? null : 0, total: acq + edu, farmUnknown: big };
+    }
+    const rate = acqRate(price);
+    const acq = Math.floor(price * rate);
+    const relief = Math.min(acq, firstCap);
+    const edu = Math.floor(price * rate * 0.5 * 0.2);
+    const farm = big ? Math.floor(price * 0.02 * 0.1) + Math.floor(relief * 0.2) : 0;
+    const acqPay = acq - relief;
+    return { price, mode, rate, acq, relief, acqPay, edu, farm, total: acqPay + edu + farm, firstEligible: !!o.first && price <= ACQ.firstMax };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -1289,6 +1321,7 @@
     GIFT, giftRate, giftTax, giftDeadline,
     VAT, vatCardRule, vatDeadline, simpleVat, generalVat,
     OVERTIME, hourlyFromMonthly, hm, shiftHours, overtimeDay, overtimeMonth,
+    ACQ, acqRate, acqTax,
     comma, won, korean,
   };
 
