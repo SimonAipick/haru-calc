@@ -619,6 +619,25 @@ var a8 = C.acqTax({ price: 600000000, mode: 'heavy8' }); eq('acq heavy8', a8.acq
 eq('acq heavy12', C.acqTax({ price: 600000000, mode: 'heavy12' }).acq, 72000000, 0);
 eq('acq first blocks heavy', C.acqTax({ price: 500000000, mode: 'heavy8', first: 2000000 }).rate, 0.01, 1e-9);
 
+// 자동차 취득세 (지방세법 제10조의5·제12조·제17조, 시행령 제18조②4호, 지특법 제22조의2·제66조④·제67조·제177조의2·제180조) — 손 계산
+var ca1 = C.carAcqTax({ price: 33000000, vatIncl: true, type: 'car' }); eq('car acq base', ca1.base, 30000000, 0); eq('car acq 7%', ca1.pay, 2100000, 0);
+var ca2 = C.carAcqTax({ price: 55000000, vatIncl: true, type: 'car', fuel: 'ev', date: '2026-12-20' }); eq('ev tax', ca2.tax, 3500000, 0); eq('ev relief', ca2.relief, 1400000, 0); eq('ev pay', ca2.pay, 2100000, 0);
+eq('ev 2027 no relief', C.carAcqTax({ price: 55000000, vatIncl: true, type: 'car', fuel: 'ev', date: '2027-01-05' }).pay, 3500000, 0);
+eq('light full', C.carAcqTax({ price: 16500000, vatIncl: true, type: 'light', date: '2026-12-01' }).pay, 0, 0);
+eq('light over 75', C.carAcqTax({ price: 22000000, vatIncl: true, type: 'light', date: '2026-12-01' }).pay, 50000, 0);
+var ca5 = C.carAcqTax({ used: true, price: 8000000, standard: 10000000, type: 'car' }); eq('used std base', ca5.base, 10000000, 0); eq('used std tax', ca5.pay, 700000, 0);
+eq('used price above std', C.carAcqTax({ used: true, price: 12000000, standard: 10000000, type: 'car' }).pay, 840000, 0);
+var ca6 = C.carAcqTax({ price: 44000000, vatIncl: true, type: 'car', kids: 3, seats7: true, date: '2026-12-01' }); eq('kids3 7seat min tax', ca6.pay, 420000, 0); eq('kids3 minTax flag', ca6.minTax, true);
+eq('kids3 sedan cap', C.carAcqTax({ price: 30000000, type: 'car', kids: 3, date: '2026-12-01' }).pay, 700000, 0);
+eq('kids2 sedan over', C.carAcqTax({ price: 30000000, type: 'car', kids: 2, date: '2026-12-01' }).pay, 1400000, 0);
+eq('kids2 sedan half', C.carAcqTax({ price: 15000000, type: 'car', kids: 2, date: '2026-12-01' }).pay, 525000, 0);
+eq('kids3+ev 7seat best', C.carAcqTax({ price: 50000000, type: 'car', fuel: 'ev', kids: 3, seats7: true, date: '2026-12-01' }).pay, 525000, 0);
+eq('kids3+ev sedan', C.carAcqTax({ price: 50000000, type: 'car', fuel: 'ev', kids: 3, date: '2026-12-01' }).pay, 2100000, 0);
+eq('exempt 50만', C.carAcqTax({ used: true, price: 500000, type: 'car' }).pay, 0, 0);
+eq('moto 2%', C.carAcqTax({ price: 3000000, type: 'moto' }).pay, 60000, 0);
+eq('van 5%', C.carAcqTax({ price: 20000000, type: 'van' }).pay, 1000000, 0);
+eq('biz 4% no kids', C.carAcqTax({ price: 20000000, type: 'biz', kids: 3, date: '2026-12-01' }).pay, 800000, 0);
+
 if (typeof window.extraTests === 'function') window.extraTests(eq, C, D);
 log((fails ? 'FAILED ' : 'OK ') + (total - fails) + '/' + total);
 if (fails) { if (isNode) process.exit(1); else throw new Error('tests failed'); }

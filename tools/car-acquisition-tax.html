@@ -1,0 +1,164 @@
+<!--
+{"slug": "car-acquisition-tax", "title": "자동차 취득세 계산기", "category": "금융", "order": 17,
+ "short": "신차·중고차 7%, 경차·전기차·다자녀 감면",
+ "description": "새 차나 중고차를 살 때 내는 취득세를 계산합니다. 승용차 7%, 경차 4%, 승합·화물 5%, 부가세를 뺀 과세표준, 중고차 시가표준액, 경차 75만원·전기차 140만원(2026년 12월 31일까지)·다자녀 감면, 면제 세액이 200만원을 넘을 때의 최소납부까지 2026년 법령 원문 기준으로 보여 줍니다.",
+ "lead": "차값과 차 종류만 넣으면 취득세와 받을 수 있는 감면을 계산합니다. 전기차 취득세 감면은 현행 법으로 2026년 12월 31일 취득분까지입니다."}
+-->
+<!-- 근거 (2026-11-28 law.go.kr 원문 확인):
+     지방세법 (법률 제21308호, 시행 2026. 7. 1.) https://www.law.go.kr/법령/지방세법
+       제10조의5①1호(무상취득은 시가표준액)·2호(유상승계는 사실상취득가격, 신고가가 시가표준액보다 적으면 시가표준액),
+       제12조①2호 차량 세율(비영업용 승용 1천분의 70·경자동차 1천분의 40, 이륜(125cc 이하) 1천분의 20, 그 밖 비영업용 1천분의 50·경자동차 40, 영업용 40),
+       제17조① 취득가액 50만원 이하 면세점, 제20조① 취득일부터 60일, 제150조1호 자동차 취득세는 지방교육세 납세의무 제외
+     지방세법 시행령 (대통령령 제36736호, 시행 2026. 10. 1.) https://www.law.go.kr/법령/지방세법시행령
+       제18조① 단서(일시급 할인은 할인된 금액, 개인은 할부이자 등 제외)·②4호(부가가치세 제외)·③2호(보조금 지급자도 비용 지급자), 제20조③1호(인도일과 잔금지급일 중 빠른 날), 제23조(비영업용 승용·경형·이륜 범위)
+     농어촌특별세법 (법률 제21611호) 제4조10의2 자동차 취득세 비과세
+     지방세특례제한법 (법률 제21738호, 시행 2026. 6. 2.) https://www.law.go.kr/법령/지방세특례제한법
+       제22조의2①②(18세 미만 자녀 3명: 7~10인승 승용·15인 이하 승합·1톤 이하 화물·250cc 이하 이륜 면제, 그 밖 승용 140만원 공제 / 2명: 50%, 그 밖 승용은 140만원 초과 시 70만원 공제, 2027-12-31까지, 1대),
+       제66조④ 전기차 140만원(2026-12-31까지)·⑤ 수소전기차 140만원(화물 제외, 2027-12-31까지), 제67조① 경형 승용 75만원·② 경형 승합·화물 면제(2027-12-31까지, 1년 안 영업용 사용 시 추징),
+       제177조의2① 면제인데 취득세 200만원 초과면 85% 감면(제66조 제외), 제180조 감면 중복 시 큰 것 하나 -->
+<form id="f" class="calc" novalidate>
+  <fieldset>
+    <legend>새 차인가요?</legend>
+    <div class="seg">
+      <label><input type="radio" name="used" value="0" checked> 신차</label>
+      <label><input type="radio" name="used" value="1"> 중고차</label>
+    </div>
+  </fieldset>
+  <label id="priceLabel">차값 (옵션·탁송 포함 실제 낸 금액, 할인 뒤)<input class="money" id="price" inputmode="numeric" placeholder="예: 33,000,000"></label>
+  <fieldset id="vatBox">
+    <legend>위 금액에 부가세가 들어 있나요?</legend>
+    <div class="seg">
+      <label><input type="radio" name="vat" value="1" checked> 포함 (견적서 총액)</label>
+      <label><input type="radio" name="vat" value="0"> 제외 (공급가액)</label>
+    </div>
+  </fieldset>
+  <label id="stdBox" hidden>시가표준액 <small>위택스·자동차 등록 시 확인, 모르면 비워 두기</small><input class="money" id="standard" inputmode="numeric" placeholder="예: 10,000,000"></label>
+  <fieldset>
+    <legend>차 종류 (자동차등록증 기준)</legend>
+    <div class="seg">
+      <label><input type="radio" name="type" value="car" checked> 승용 7%</label>
+      <label><input type="radio" name="type" value="light"> 경형 승용 4%</label>
+      <label><input type="radio" name="type" value="van"> 승합·화물 5%</label>
+      <label><input type="radio" name="type" value="lightvan"> 경형 승합·화물 4%</label>
+      <label><input type="radio" name="type" value="biz"> 영업용 4%</label>
+      <label><input type="radio" name="type" value="moto"> 이륜 125cc 이하 2%</label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>연료</legend>
+    <div class="seg">
+      <label><input type="radio" name="fuel" value="" checked> 휘발유·경유·LPG·하이브리드</label>
+      <label><input type="radio" name="fuel" value="ev"> 전기차</label>
+      <label><input type="radio" name="fuel" value="h2"> 수소전기차</label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>18세 미만 자녀 (다자녀 감면)</legend>
+    <div class="seg">
+      <label><input type="radio" name="kids" value="0" checked> 해당 없음</label>
+      <label><input type="radio" name="kids" value="2"> 2명</label>
+      <label><input type="radio" name="kids" value="3"> 3명 이상</label>
+    </div>
+  </fieldset>
+  <label class="check"><input type="checkbox" id="seats7"> 승차정원 7~10인승 승용차</label>
+  <label>취득일 <small>새 차는 차를 받는 날과 잔금일 중 빠른 날</small><input type="date" id="date"></label>
+</form>
+<div id="out" class="result" aria-live="polite"></div>
+<script>
+UI.today('date');
+(function () {
+  const sync = () => {
+    const used = UI.val('used') === '1';
+    document.getElementById('vatBox').hidden = used;
+    document.getElementById('stdBox').hidden = !used;
+    document.getElementById('priceLabel').firstChild.textContent = used ? '실제 산 값 (계약서 금액)' : '차값 (옵션·탁송 포함 실제 낸 금액, 할인 뒤)';
+  };
+  document.getElementById('f').addEventListener('change', sync);
+  sync();
+})();
+UI.bind('f', 'out', function () {
+  const price = UI.num('price');
+  if (!price) return null;
+  const used = UI.val('used') === '1';
+  const o = { price, used, vatIncl: UI.val('vat') === '1', standard: UI.num('standard'), type: UI.val('type'),
+    fuel: UI.val('fuel'), kids: Number(UI.val('kids')), seats7: document.getElementById('seats7').checked,
+    date: document.getElementById('date').value || undefined };
+  const r = Calc.carAcqTax(o);
+  const names = { light: '경형 승용차 감면 (75만원까지)', lightvan: '경형 승합·화물차 면제', ev: '전기차 감면 (140만원까지)', h2: '수소전기차 감면 (140만원까지)', kids3: '다자녀(3명 이상) 감면', kids2: '다자녀(2명) 감면' };
+  if (r.reason === 'exempt') return UI.result(['낼 취득세', '0원'], [['과세표준', Calc.won(r.base)]], ['취득가액이 50만원 이하라 취득세를 내지 않습니다(지방세법 제17조).']);
+  const rows = [['과세표준', Calc.won(r.base)], ['세율', (r.rate * 100) + '%'], ['취득세', Calc.won(r.tax)]];
+  if (r.relief) rows.push([names[r.reason], '− ' + Calc.won(r.relief)]);
+  rows.push(['차값 대비', (Math.round(r.pay / price * 10000) / 100).toFixed(2) + '%']);
+  const notes = [];
+  if (!used && o.vatIncl) notes.push('부가가치세는 과세표준에서 빠집니다. 견적서 총액 ÷ 1.1로 계산했습니다.');
+  if (used && o.standard && o.standard > price) notes.push('산 값이 시가표준액보다 낮아 시가표준액으로 계산했습니다(지방세법 제10조의5①2호).');
+  if (used && !o.standard) notes.push('중고차는 산 값이 시가표준액보다 낮으면 시가표준액으로 세금을 매깁니다. 시가표준액을 넣으면 반영됩니다.');
+  if (r.minTax) notes.push('면제 대상이지만 취득세가 200만원을 넘어 85%만 감면합니다(지방세특례제한법 제177조의2, 최소납부세제).');
+  if (r.options.length > 1) notes.push('감면이 여러 개 해당하면 가장 많이 줄어드는 하나만 받습니다(지방세특례제한법 제180조).');
+  if (o.fuel === 'ev') {
+    if (o.date && o.date > Calc.CARACQ.evUntil) notes.unshift('현행 법으로 전기차 취득세 감면은 2026년 12월 31일 취득분까지라 감면 없이 계산했습니다. 12월 국회에서 연장되면 바뀝니다.');
+    else { const later = Calc.carAcqTax(Object.assign({}, o, { date: '2027-01-01' })); if (later.pay > r.pay) notes.unshift('2027년 1월 1일 이후에 취득하면(감면이 연장되지 않는 경우) 취득세가 ' + Calc.won(later.pay - r.pay) + ' 늘어 ' + Calc.won(later.pay) + '입니다. 차를 받는 날과 잔금일 중 빠른 날이 취득일입니다.'); }
+  }
+  if (o.kids && o.type === 'biz') notes.push('다자녀 감면은 양육 목적 차량이라 영업용에는 적용하지 않았습니다.');
+  if (o.seats7 && o.type !== 'car' && o.type !== 'light') notes.push('7~10인승 표시는 승용차일 때만 의미가 있습니다.');
+  notes.push('자동차 취득세에는 지방교육세와 농어촌특별세가 붙지 않습니다. 등록할 때 사는 지역개발·도시철도 공채와 번호판·인지대는 지역마다 달라 넣지 않았습니다.');
+  return UI.result(['낼 취득세', Calc.won(r.pay)], rows, notes);
+});
+</script>
+<!-- guide -->
+<h2>자동차 취득세율 (지방세법 제12조①2호)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>차 종류</th><th>세율</th></tr></thead>
+  <tbody>
+    <tr><td>비영업용 승용차 (자가용)</td><td>7%</td></tr>
+    <tr><td>경형 승용·승합·화물 (경차)</td><td>4%</td></tr>
+    <tr><td>비영업용 승합·화물 등 승용 외 자동차</td><td>5%</td></tr>
+    <tr><td>영업용 (택시·화물 운송사업 등)</td><td>4%</td></tr>
+    <tr><td>이륜차 125cc 이하(또는 12kW 이하)</td><td>2%</td></tr>
+  </tbody>
+</table>
+</div>
+<p>세금은 <strong>과세표준 × 세율</strong>입니다. 자동차 취득세에는 지방교육세(지방세법 제150조)와 농어촌특별세(농어촌특별세법 제4조)가 붙지 않아, 집을 살 때와 달리 취득세 하나만 냅니다.</p>
+
+<h2>과세표준은 얼마인가요?</h2>
+<ul>
+  <li><strong>신차:</strong> 실제로 낸 차값(옵션·탁송료 포함, 할인 뒤)에서 <strong>부가가치세를 뺀 금액</strong>입니다(시행령 제18조②4호). 견적서 총액이 3,300만원이면 3,000만원이 과세표준입니다. 개인은 할부 이자를 넣지 않습니다.</li>
+  <li><strong>전기차 보조금:</strong> 보조금을 준 쪽도 차값을 낸 사람으로 보기 때문에(시행령 제18조③2호) 보조금을 빼기 전 차값이 기준입니다.</li>
+  <li><strong>중고차:</strong> 실제 산 값입니다. 다만 신고한 값이 행정안전부 시가표준액보다 낮으면 시가표준액으로 매깁니다(지방세법 제10조의5①2호). 증여받은 차는 시가표준액이 기준입니다.</li>
+</ul>
+
+<h2>예시: 견적서 3,300만원 자가용 승용차</h2>
+<p>과세표준 3,300만원 ÷ 1.1 = 3,000만원, 취득세 = 3,000만원 × 7% = <strong>210만원</strong>입니다. 같은 값의 경형 승용차라면 3,000만원 × 4% = 120만원에서 75만원을 빼 45만원입니다.</p>
+
+<h2>감면 (지방세특례제한법)</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>감면</th><th>내용</th><th>기한</th></tr></thead>
+  <tbody>
+    <tr><td>전기차 (제66조④)</td><td>취득세 140만원 이하면 면제, 넘으면 140만원 공제</td><td>2026년 12월 31일</td></tr>
+    <tr><td>수소전기차 (제66조⑤)</td><td>140만원까지 (화물차는 50% 따로)</td><td>2027년 12월 31일</td></tr>
+    <tr><td>경형 승용 (제67조①)</td><td>75만원까지, 1년 안에 영업용으로 쓰면 추징</td><td>2027년 12월 31일</td></tr>
+    <tr><td>경형 승합·화물 (제67조②)</td><td>면제</td><td>2027년 12월 31일</td></tr>
+    <tr><td>18세 미만 자녀 3명 이상 (제22조의2①)</td><td>7~10인승 승용·15인 이하 승합·1톤 이하 화물은 면제, 그 밖 승용차는 140만원까지</td><td>2027년 12월 31일</td></tr>
+    <tr><td>18세 미만 자녀 2명 (제22조의2②)</td><td>50% 감면, 7인승 미만 승용차는 취득세가 140만원을 넘으면 70만원 공제</td><td>2027년 12월 31일</td></tr>
+  </tbody>
+</table>
+</div>
+<p>하이브리드차 감면(40만원)은 2024년 12월 31일로 끝나 지금은 일반 승용차와 같습니다. 감면이 여러 개 해당하면 세금이 더 많이 줄어드는 하나만 받습니다(제180조). 다자녀 감면은 먼저 신청한 1대만 받고, 등록 뒤 1년 안에 정당한 사유 없이 팔면 감면받은 세금을 다시 냅니다.</p>
+
+<h2>면제인데 왜 세금이 나오나요? (최소납부세제)</h2>
+<p>지방세특례제한법 제177조의2에 따라 면제 대상이라도 원래 취득세가 200만원을 넘으면 85%만 감면하고 15%는 냅니다. 예를 들어 자녀 셋을 키우는 집이 견적서 4,400만원(과세표준 4,000만원)짜리 7인승 승용차를 사면 취득세 280만원 중 238만원을 감면받고 <strong>42만원</strong>을 냅니다. 전기차·수소차 감면(제66조)은 이 규정에서 빠집니다.</p>
+
+<h2>전기차는 올해 안에 받아야 할까요?</h2>
+<p>현행 법으로 전기차 140만원 감면은 <strong>2026년 12월 31일 취득분</strong>까지입니다. 새 차의 취득일은 차를 인도받는 날과 계약서상 잔금지급일 중 빠른 날입니다(시행령 제20조③1호). 감면 기한은 그동안 여러 번 연장됐지만 2027년분은 연말 지방세특례제한법 개정에서 정해지므로, 출고가 1월로 밀린다면 영업점에 연장 여부를 꼭 물어보세요. 과세표준 5,000만원 전기차라면 감면 여부에 따라 취득세가 210만원과 350만원으로 갈립니다.</p>
+
+<h2>자주 묻는 질문</h2>
+<h3>언제까지 내나요?</h3>
+<p>취득일부터 60일 안에 신고·납부합니다(지방세법 제20조). 실제로는 자동차를 등록하기 전에 내야 해서 보통 딜러나 매매상사가 등록하면서 함께 처리합니다.</p>
+<h3>공채와 등록 비용도 들어 있나요?</h3>
+<p>아닙니다. 등록할 때 사야 하는 지역개발채권·도시철도채권은 시·도 조례로 매입 비율과 면제 기준이 달라 넣지 않았습니다. 번호판 대금과 대행 수수료도 따로 듭니다.</p>
+<h3>장애인·국가유공자 감면은요?</h3>
+<p>장애인용 자동차 등 다른 감면은 대상 요건이 많아 계산기에 넣지 않았습니다. 해당하면 차를 등록할 시·군·구청에 문의하세요.</p>
+<h3>차를 산 뒤 해마다 내는 세금은요?</h3>
+<p><a href="../car-tax/">자동차세 연납 할인 계산기</a>에서 배기량별 자동차세와 1월 연납 할인을 확인할 수 있습니다. 집을 살 때 내는 세금은 <a href="../acquisition-tax/">주택 취득세 계산기</a>에서 볼 수 있습니다.</p>

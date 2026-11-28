@@ -1299,6 +1299,50 @@
     return { price, mode, rate, acq, relief, acqPay, edu, farm, total: acqPay + edu + farm, firstEligible: !!o.first && price <= ACQ.firstMax };
   }
 
+  // ---------- 자동차 취득세 (지방세법 제10조의5·제12조①2호·제17조·제150조, 시행령 제18조·제20조③·제23조, 지특법 제22조의2·제66조④⑤·제67조·제177조의2·제180조) ----------
+  const CARACQ = {
+    rates: { car: 0.07, light: 0.04, van: 0.05, lightvan: 0.04, biz: 0.04, moto: 0.02 },
+    exemptMax: 500000,          // 제17조 면세점 (취득가액 50만원 이하)
+    lightCap: 750000, lightUntil: '2027-12-31',   // 지특법 제67조①
+    evCap: 1400000, evUntil: '2026-12-31', h2Until: '2027-12-31', // 지특법 제66조④⑤
+    kidsUntil: '2027-12-31', kidsCap: 1400000, kids2Cap: 700000,  // 지특법 제22조의2
+    minTaxLine: 2000000, minTaxRate: 0.85,        // 지특법 제177조의2①
+  };
+  // o: { price, vatIncl, used, standard, type, fuel('', 'ev', 'h2'), kids(0|2|3), seats7, date('YYYY-MM-DD') }
+  function carAcqTax(o) {
+    const type = CARACQ.rates[o.type] != null ? o.type : 'car';
+    const price = Math.max(0, o.price || 0);
+    const date = o.date || '2026-12-31';
+    let base;
+    if (o.used) base = Math.max(price, Math.max(0, o.standard || 0)); // 제10조의5①2호: 신고가가 시가표준액보다 적으면 시가표준액
+    else base = o.vatIncl ? Math.round(price / 1.1) : price;           // 시행령 제18조②4호: 부가가치세 제외
+    const rate = CARACQ.rates[type];
+    if (base <= CARACQ.exemptMax) return { base, rate, tax: 0, relief: 0, pay: 0, reason: 'exempt', options: [] };
+    const tax = Math.floor(base * rate);
+    const opts = [];
+    if (type === 'light' && date <= CARACQ.lightUntil) opts.push({ key: 'light', relief: Math.min(tax, CARACQ.lightCap), full: tax <= CARACQ.lightCap });
+    if (type === 'lightvan' && date <= CARACQ.lightUntil) opts.push({ key: 'lightvan', relief: tax, full: true });
+    if (o.fuel === 'ev' && date <= CARACQ.evUntil) opts.push({ key: 'ev', relief: Math.min(tax, CARACQ.evCap), full: tax <= CARACQ.evCap, noMin: true });
+    if (o.fuel === 'h2' && type !== 'van' && type !== 'lightvan' && date <= CARACQ.h2Until) opts.push({ key: 'h2', relief: Math.min(tax, CARACQ.evCap), full: tax <= CARACQ.evCap, noMin: true });
+    if ((o.kids === 3 || o.kids === 2) && type !== 'biz' && date <= CARACQ.kidsUntil) {
+      const fullKind = type === 'van' || type === 'lightvan' || type === 'moto' || ((type === 'car' || type === 'light') && o.seats7);
+      let relief, full;
+      if (o.kids === 3) {
+        if (fullKind) { relief = tax; full = true; }
+        else { relief = Math.min(tax, CARACQ.kidsCap); full = tax <= CARACQ.kidsCap; }
+      } else {
+        relief = fullKind || tax <= CARACQ.kidsCap ? Math.floor(tax * 0.5) : CARACQ.kids2Cap; full = false;
+      }
+      opts.push({ key: 'kids' + o.kids, relief, full });
+    }
+    // 제177조의2: 면제인데 산출세액이 200만원을 넘으면 85%만 감면 (제66조는 제외)
+    opts.forEach((x) => { if (x.full && !x.noMin && tax > CARACQ.minTaxLine) { x.relief = Math.floor(tax * CARACQ.minTaxRate); x.minTax = true; } });
+    // 제180조: 감면 세액이 큰 것 하나만
+    const best = opts.reduce((a, b) => (b.relief > (a ? a.relief : -1) ? b : a), null);
+    const relief = best ? best.relief : 0;
+    return { base, rate, tax, relief, pay: tax - relief, reason: best ? best.key : '', minTax: !!(best && best.minTax), options: opts };
+  }
+
   global.Calc = {
     PYEONG, parseDate, daysBetween, addDays, addMonths, fullYears, fullMonths, fmtDate,
     severance, annualLeave, weeklyHolidayHours, monthlyHours, loan, savings, age, bmi,
@@ -1322,6 +1366,7 @@
     VAT, vatCardRule, vatDeadline, simpleVat, generalVat,
     OVERTIME, hourlyFromMonthly, hm, shiftHours, overtimeDay, overtimeMonth,
     ACQ, acqRate, acqTax,
+    CARACQ, carAcqTax,
     comma, won, korean,
   };
 
