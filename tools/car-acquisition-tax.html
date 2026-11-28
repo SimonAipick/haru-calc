@@ -86,7 +86,7 @@ UI.bind('f', 'out', function () {
   const r = Calc.carAcqTax(o);
   const names = { light: '경형 승용차 감면 (75만원까지)', lightvan: '경형 승합·화물차 면제', ev: '전기차 감면 (140만원까지)', h2: '수소전기차 감면 (140만원까지)', kids3: '다자녀(3명 이상) 감면', kids2: '다자녀(2명) 감면' };
   if (r.reason === 'exempt') return UI.result(['낼 취득세', '0원'], [['과세표준', Calc.won(r.base)]], ['취득가액이 50만원 이하라 취득세를 내지 않습니다(지방세법 제17조).']);
-  const rows = [['과세표준', Calc.won(r.base)], ['세율', (r.rate * 100) + '%'], ['취득세', Calc.won(r.tax)]];
+  const rows = [['과세표준', Calc.won(r.base)], ['세율', Math.round(r.rate * 1000) / 10 + '%'], ['취득세', Calc.won(r.tax)]];
   if (r.relief) rows.push([names[r.reason], '− ' + Calc.won(r.relief)]);
   rows.push(['차값 대비', (Math.round(r.pay / price * 10000) / 100).toFixed(2) + '%']);
   const notes = [];
